@@ -1135,6 +1135,10 @@ token: a, Category: 2
 token: ), Category: 8
 token: a, Category: 2
 token: =, Category: 4
+token: a, Category: 2
+token: *, Category: 5
+token: 20, Category: 3
+token: +, Category: 6
 token: 120, Category: 3
 token: ;, Category: 9
 */
@@ -1208,7 +1212,7 @@ int main()
     printDFA(dFA);
 
     // std::string input = "if ifa"; // test1 ok
-    std::string input = "a = 1; if (a) a = 120;"; // test2 ok
+    std::string input = "a = 1; if (a) a = a * 20 + 120;"; // test2 ok
     std::vector<std::pair<std::string, TokenCategory> > token2CatStream;
     token2CatStream = scanner(dFA, input, rules);
     printToken2CatStream(token2CatStream);
