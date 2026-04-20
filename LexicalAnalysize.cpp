@@ -9,24 +9,12 @@
 #include <fstream>
 #include <queue>
 #include <stack>
+#include "common.h"
+#include "LexicalAnalysize.h"
 
 // ===================== 1. NFA 结构定义 =====================
 
 constexpr int invalidPrecedence = 999;
-
-enum TokenCategory
-{
-    IF = 1,
-    IDENTIFIER,
-    INTEGER,
-    ASSIGN,
-    MUL,
-    ADD,
-    LPARENTHESES,
-    RPARENTHESES,
-    SEMICOLON,
-    IVALID_TOKEN_CATEGORY
-};
 
 // NFA 状态
 struct NFAState 
@@ -1151,8 +1139,7 @@ void printToken2CatStream(std::vector<std::pair<std::string, TokenCategory> > to
     }
 }
 
-// ===================== 主函数：测试 =====================
-int main() 
+std::vector<std::pair<std::string, TokenCategory> > LexicalAnalysis(const std::string& input) 
 {
     std::cout << "==========1. Lexical Analysis:\n";
     /*
@@ -1211,9 +1198,9 @@ int main()
     std::map<DFAState*, std::map<char, DFAState* > >  dFA = nFA2DFA(final_nfa);
     printDFA(dFA);
 
-    // std::string input = "if ifa"; // test1 ok
-    std::string input = "a = 1; if (a) a = a * 20 + 120;"; // test2 ok
     std::vector<std::pair<std::string, TokenCategory> > token2CatStream;
     token2CatStream = scanner(dFA, input, rules);
     printToken2CatStream(token2CatStream);
+
+    return token2CatStream;
 }
