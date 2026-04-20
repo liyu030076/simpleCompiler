@@ -18,6 +18,13 @@ enum TokenCategory
 {
     IF = 1,
     IDENTIFIER,
+    INTEGER,
+    ASSIGN,
+    MUL,
+    ADD,
+    LPARENTHESES,
+    RPARENTHESES,
+    SEMICOLON,
     IVALID_TOKEN_CATEGORY
 };
 
@@ -347,9 +354,17 @@ NFA build_if_id_nfa()
     NFAState* state2 = new_state();
     NFAState* state3 = new_state();
     NFAState* state4 = new_state();
+    NFAState* state5 = new_state();
+    NFAState* state6 = new_state();
+    NFAState* state7 = new_state();
+    NFAState* state8 = new_state();
+    NFAState* state9 = new_state();
+    NFAState* state10 = new_state();
+    NFAState* state11 = new_state();
 
     state0->transitions['i'].push_back(state1);
     state1->transitions['f'].push_back(state2);
+
     for (char ch = 'A'; ch <= 'Z'; ch++) 
     {
         state0->transitions[ch].push_back(state3);
@@ -365,19 +380,56 @@ NFA build_if_id_nfa()
         state3->transitions[ch].push_back(state3);
     }
 
-    state2->transitions['\0'].push_back(state4);
-    state3->transitions['\0'].push_back(state4);
+    for (char ch = '0'; ch <= '9'; ch++) 
+    {
+        state0->transitions[ch].push_back(state4);
+    }
+    for (char ch = '0'; ch <= '9'; ch++) 
+    {
+        state4->transitions[ch].push_back(state4);
+    }
+
+    state0->transitions['='].push_back(state5);
+    state0->transitions['*'].push_back(state6);
+    state0->transitions['+'].push_back(state7);
+    state0->transitions['('].push_back(state8);
+    state0->transitions[')'].push_back(state9);
+    state0->transitions[';'].push_back(state10);
+
+    state2->transitions['\0'].push_back(state11);
+    state3->transitions['\0'].push_back(state11);
+    state4->transitions['\0'].push_back(state11);
+    state5->transitions['\0'].push_back(state11);
+    state6->transitions['\0'].push_back(state11);
+    state7->transitions['\0'].push_back(state11);
+    state8->transitions['\0'].push_back(state11);
+    state9->transitions['\0'].push_back(state11);
+    state10->transitions['\0'].push_back(state11);
 
     state0->isStart = true;
-    state4->isAccepted = true;
+    state11->isAccepted = true;
 
     state2->acceptedPrecedence = 1;
     state3->acceptedPrecedence = 2;
+    state4->acceptedPrecedence = 2;
+    state5->acceptedPrecedence = 4; // operator precedence: * > + > = > ;
+    state6->acceptedPrecedence = 2;
+    state7->acceptedPrecedence = 3;
+    state8->acceptedPrecedence = 0;
+    state9->acceptedPrecedence = 0;
+    state10->acceptedPrecedence = 5;
 
     state2->tokenCategory = IF;
     state3->tokenCategory = IDENTIFIER;
+    state4->tokenCategory = INTEGER;
+    state5->tokenCategory = ASSIGN;
+    state6->tokenCategory = MUL;
+    state7->tokenCategory = ADD;
+    state8->tokenCategory = LPARENTHESES;
+    state9->tokenCategory = RPARENTHESES;
+    state10->tokenCategory = SEMICOLON;
 
-    return NFA(state0, state4);
+    return NFA(state0, state11);
 }
 
 // ===================== 4. 测试工具：打印NFA转移关系 =====================
@@ -624,7 +676,12 @@ nFA2DFA(NFA nfa)
 
     sigma.push_back('+');
     */
-    std::vector<char> sigma = {'a', 'i', 'f'};  // simplify test: ok
+    std::vector<char> sigma = 
+    {
+        'a', 'i', 'f', 
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '=', '*', '+', '(', ')', ';' 
+    };  // simplify test: ok
 
     std::map<DFAState*, 
              std::map<char, DFAState* > 
@@ -640,19 +697,20 @@ nFA2DFA(NFA nfa)
         std::cout << "====================process a new row:\n";
         for (auto ch: sigma) // a i f
         {
+            std::cout << "====================process ch: " << ch << std::endl;
             std::vector<NFAState*> nextNFAStates = delta(curDFAState->nFAStates, ch); // {n3}  -> {n3, n1}      -> {n3}      -> 
             std::vector<NFAState*> newNFAStates = epsilonClosure(nextNFAStates);   // {n3, n4} -> {n3, n4, n1} ->  {n3, n4} ->
 
-            std::cout << "newNFAStates: \n";
+            std::cout << "=============newNFAStates: \n";
             for (const auto& nfastate: newNFAStates)
             {
                 std::cout << "nfaState id: " << nfastate->id << std::endl;
             }
             
-            std::cout << "fullList: \n";
+            std::cout << "=============fullList: \n";
             for (const auto& dfaState: fullList)
             {
-                std::cout << "dfaState id: " << dfaState->id << std::endl;
+                std::cout << "===dfaState id: " << dfaState->id << std::endl;
                 for (const auto& nfastate: dfaState->nFAStates)
                 {
                     std::cout << "nfaState id: " << nfastate->id << std::endl;
@@ -679,9 +737,9 @@ nFA2DFA(NFA nfa)
             {
                 if (!isInFullList2DFAState.first)
                 {
-                    std::cout << "newDiscovered: "  << std::endl;
                     dstDFAState = new_dfa_state(); 
                     dstDFAState->nFAStates = newNFAStates;
+                    std::cout << "==========newDiscovered, dfaState id: " << dstDFAState->id << "\n\n";
                     for (const auto& nFAState: newNFAStates) // DFA state is accepted if one of it's NFA states is accepted
                     {
                         if (nFAState->isAccepted)
@@ -704,9 +762,19 @@ nFA2DFA(NFA nfa)
                     std::cout << "hasDiscovered: " << std::endl;
                     dstDFAState = isInFullList2DFAState.second; // only this branch need matched DFAState
                 }
-            }
 
-            DFATable[curDFAState][ch] = dstDFAState;
+                std::cout << "===========fill DTATable, curDFAState id: " << curDFAState->id << 
+                    " ---ch: " << ch << "---> dstDFAState id: " << dstDFAState->id << std::endl;
+
+                /*
+                ===== optimize/Design for space efficiency:
+                    DFATable isn't designed as a strict two dimension struct, 
+                    because we put noting rather than an ErrorState(d_phi) into DFATable 
+                    when there isn't a transition outgoing from the current DFA state for a character.
+                */
+                DFATable[curDFAState][ch] = dstDFAState; // d_phi(Error State) is not filled to DFATable 
+            }
+            // DFATable[curDFAState][ch] = dstDFAState;  // d_phi is also filled to DFATable => space efficiency lower
         }
     }
 
@@ -796,10 +864,59 @@ void Rollback(const std::string& input)
     }
 }
 
+/*
+Table Driven Scanner 伪代码：采用 2个表
+    state = s0 // start state
+    lexeme = empty
+    stack.push(NULL) // 栈底哨兵
+    stack.clear() // 特殊的 clear：不 clear NULL state
+
+    // the longest mathing 
+    while (state != Se） // 不是 Error state
+        char = GetNextChar()
+        lexeme = lexeme + char
+        if state belong to SA  
+            stack.clear()    // 清空 stack 中 之前的 valid states（可能含之前的 accept state）
+        stack.push(state) // 入栈 the last latest accept state
+        charCat = CatTbl(char)            // Categorization Table
+        state = TxTbl[state][charCat] // Transition Table => move to new state
+
+    // 第1个 while 循环结束时，state 必然是 错误状态 Se，但 Se 并未入栈。
+    // 栈只依次记录 token matching 路径上的 valid state（接受状态 和 非接受状态）和 NULL。
+    // 处理到达Se时，lexeme 和 输入流指针 多向前的一步。
+    if (state == Se) // 必然进
+        truncate lexeme    // 1. 先回退字符（删掉最后那个导致错误的字符）
+            Rollback pointer   // 2. 回退输入流指针
+
+    // 回退：最终到达 the last latest accept state 或 NULL state
+    while (state = stack.top(),  state != NULL && state not belong to SA) 
+        truncate.lexeme // remove last character 
+        Rollback // move the pointer in lexeme to the previous character
+        state = stack.pop()
+        
+    if state belong to SA 
+        return Type[state] // multiple types：优先级
+    else
+        return error 
+        
+    分析：
+        [1] REs 不能识别的字符，或者说 scanning 过程中应该忽略的字符，如 空白符(Whitespace Characters: blank、\t、\n) ，不必进入 DFA 查询，直接被忽略更高效。
+        
+        [2] state 有4种可能取值
+            非接受状态（Note: 起始状态 可能是 非接受状态 或 接受状态）
+            SA : Set of accept states
+            Se: 错误状态 
+            NULL: 作为 栈底哨兵，来判断已经回退到本次 token 识别（matching）的初始位置。
+                栈底哨兵 不能用 起始状态 s0，因为一次 token mathing 过程中从 s0 开始可能还会到达 s0
+
+*/
 std::vector<std::pair<std::string, TokenCategory> > 
 scanner(std::map<DFAState*, std::map<char, DFAState* > > dFATable, const std::string& input, std::vector<Rule> rules)
 {
     std::vector<std::pair<std::string, TokenCategory> > token2CatStream;
+
+    DFAState* stateErr = NULL;           // error state represent as NULL
+    DFAState* stackStateSentinel = NULL; // sentinel state in the bottom of stack
 
     while (scanningPos != input.size() )
     {
@@ -807,71 +924,193 @@ scanner(std::map<DFAState*, std::map<char, DFAState* > > dFATable, const std::st
         std::string lexeme; 
 
         std::stack<DFAState*> stateStack;
-        std::stack<DFAState*>().swap(stateStack); // clear stateStack
+        std::stack<DFAState*>().swap(stateStack); // clear stateStack // redundant, only for clear meaning 
+        stateStack.push(stackStateSentinel);      // put sentinel
 
+        std::cout << "===== recognize new lexeme: " << lexeme << std::endl;
+        
         // the longest mathing 
-        while (state != NULL) // while (state != Se） // 不是 Error state
+        char ch = '\0';
+        // bool REs_NFA_configError = false;
+        bool stateTransitionsAllEmpty = false;
+        bool isScanningEnd = false;
+        while (state != stateErr)
         {
-            
-            char ch = GetNextChar(input);
+            //std::cout << "===== lexeme2: " << lexeme << std::endl;
+            ch = GetNextChar(input);
             lexeme = lexeme + ch;
-
-            if (state->isAccepted) 
+            
+            if (state->isAccepted) // clear all the stack states except sentinel state before the (upcoming pushed) last latest accept state
             {
-                std::stack<DFAState*>().swap(stateStack); // 清空 stack 中该 accept state 之前的 states
+                std::stack<DFAState*>().swap(stateStack); 
+                stateStack.push(stackStateSentinel);     
             }
                 
-            stateStack.push(state);
-            
-            /*
-                DFA 表不是严格二维表结构，对某个 DFAState 的 某个 char 没有转移时，
-                不是转移到 一个设定的 Error state，而是不填入 DFA map。
-            */
-             
-            auto iter1  = dFATable.find(state); 
-            if (iter1 != dFATable.end() )
+            stateStack.push(state); // first time: push from out of while; then: find a transition / new valid state, the push in next iteration. 
+            std::cout << "=====move to state id:" << state->id << std::endl;
+
+            std::cout << "ch:" << ch << ", lexeme: " << lexeme << std::endl;
+            if (' ' == ch) // whitespaces character(blank、\n、\t) doesn't need to enter DFA matching，directly ignored(continue next token matching) is more efficient.
+            {
+                break;
+            }
+
+            auto iter1 = dFATable.find(state); 
+            if (iter1 != dFATable.end() ) // the state row in DFATable is not empty => there is at least one transition for some character in sigma
             {
                 auto sym2State = iter1->second;
 
                 auto iter2 = sym2State.find(ch);
                 if (iter2 != sym2State.end() )
                 {
-                    state = iter2->second; // new state
+                    state = iter2->second; // find new state => there is valid transition
                 }
                 else 
                 {
-                    state = NULL;
+                    state = stateErr; // for state + ch, there isn't valid transition
                 }
             }
-            else 
+            else // the state row in DFATable is empty => the (current) state is the last accepted state, and there isn't any transition for any character in sigma.
             {
-                state = NULL;
+                std::cout << "the (current) state row in 2 dimension DFATable is empty. The state is the last accepted state and is not filled into DFATable!\n";
+                
+                // REs_NFA_configError = true; // ==== when DFATable is strict 2 dimension struct
+                stateTransitionsAllEmpty = true;
+                break;
             }
         } 
         
-        if (!stateStack.empty() )
+        if (' ' == ch) 
         {
-            state = stateStack.top();
-            // 回退：最终到达 the last latest accept state 或 NULL state
-            while (!state->isAccepted)
+            if (state->isAccepted) // such as blank just next a valid token 
             {
-                state = stateStack.top();
-                stateStack.pop();
+                std::cout << "lexeme.size: " << lexeme.size() << std::endl;
+                if (lexeme.size() >= 1)
+                {
+                    std::cout << "Rollback0: meet character that should be ignore, only remove last character of lexeme." << std::endl;
+                    lexeme.resize(lexeme.size()-1); // remove last character 
+                }
 
-                lexeme.resize(lexeme.size()-1); // remove last character 
-                Rollback(input); // move the pointer in lexeme to the previous character
-            }
-
-            if(state->isAccepted)
-            {
                 std::pair<std::string, TokenCategory> token2Cat = {lexeme, state->tokenCategory};
-                //std::cout << "\ntoken: " << lexeme << ", category: " << state->tokenCategory << std::endl;
+                std::cout << "token: " << lexeme << ", category: " << state->tokenCategory << std::endl;
                 token2CatStream.push_back(token2Cat);
             }
-            else
+            else // such as the successive blanks those are not the first blank that just next a valid token. 
             {
-                std::cout << "identify token error!!!\n";
+                // do nothing
             }
+
+            continue;
+        }
+        else if ('\0' == ch) // scanning end 
+        {
+            std::cout << "lexeme.size: " << lexeme.size() << std::endl;
+            if (lexeme.size() >= 1)
+            {
+                std::cout << "Rollback4: scanning end, only remove last character of lexeme." << std::endl;
+                lexeme.resize(lexeme.size()-1); // remove last character 
+            }
+
+            std::pair<std::string, TokenCategory> token2Cat = {lexeme, state->tokenCategory};
+            std::cout << "token: " << lexeme << ", category: " << state->tokenCategory << std::endl;
+            token2CatStream.push_back(token2Cat);
+
+            break;
+        }
+
+        //if (REs_NFA_configError)
+        //{
+        //    std::cout << "end scanning in advance because of REs_NFA_configError. Please carefully check whether RE& NFA config can cover input program!!!\n";
+        //    break;
+        //}
+
+        // Note: 循环的退出条件 = 循环判断条件 | 循环提前 break 的条件
+        if (state == stateErr) // strict 2 dimension DFATable, 正常 REs & NFA 配置下, 必然进。即 第1个 while 循环结束时，state 必然是 错误状态 Se，但 Se 并未入栈。
+        {
+            std::cout << "lexeme.size: " << lexeme.size() << std::endl;
+            if (lexeme.size() >= 1)
+            {
+                std::cout << "Rollback1: reach ERROR DFAState" << std::endl;
+                lexeme.resize(lexeme.size()-1); // remove last character 
+                Rollback(input);                // move the pointer in lexeme to the previous character
+            }
+        }
+        else //if (stateTransitionsAllEmpty) // DFATable space compress, if the state (transitions) row is all all d_phi, we don't fill this state to DFATable.
+        {
+            std::cout << "lexeme.size: " << lexeme.size() << std::endl;
+            if (lexeme.size() >= 1)
+            {
+                std::cout << "Rollback2: current DFA state (transitions) row is not filled into DFATable" << std::endl;
+                lexeme.resize(lexeme.size()-1); // remove last character 
+                Rollback(input);                // move the pointer in lexeme to the previous character
+            }
+        }
+
+        // 回退：最终到达 the last latest accept state 或 NULL state
+        while (!stateStack.empty() && 
+                (state = stateStack.top(), stackStateSentinel != state) && 
+                !state->isAccepted)
+        {
+            std::cout << "lexeme.size: " << lexeme.size() << std::endl;
+            if (lexeme.size() >= 1)
+            {
+                std::cout << "Rollback3: rollback stack states those aren't accepted and is higher than the last accepted state." << std::endl;
+                lexeme.resize(lexeme.size()-1); // remove last character 
+                Rollback(input);                // move the pointer in lexeme to the previous character
+                stateStack.pop();
+            }
+            else 
+            {
+                std::cout << "scanning: the longest matching error!!!";
+                break;
+            } 
+        }
+
+        /*
+        // ===== refactor method: the meaning of the equivalent code below is less clear! so if some code is like this, we should refactor it like the upper.
+        while (!stateStack.empty() )
+        {
+            state = stateStack.top();
+            if (stackStateSentinel != state && !state->isAccepted) 
+            {
+                std::cout << "lexeme.size: " << lexeme.size() << std::endl;
+                if (lexeme.size() >= 1)
+                {
+                    std::cout << "Rollback3: rollback stack states those aren't accepted and is higher than the last accepted state." << std::endl;
+                    lexeme.resize(lexeme.size()-1); // remove last character 
+                    Rollback(input);                // move the pointer in lexeme to the previous character
+                    stateStack.pop();
+                }
+                else 
+                {
+                    std::cout << "scanning: the longest matching error!!!";
+                    break;
+                }  
+            }
+            else if(stackStateSentinel == state)
+            {
+                break;
+            }
+            else // if (state->isAccepted) // if(stackStateSentinel != state && state->isAccepted)
+            {
+                break;
+            }
+        }
+        */
+
+        if (stackStateSentinel != state && state->isAccepted)
+        {
+            std::pair<std::string, TokenCategory> token2Cat = {lexeme, state->tokenCategory};
+            std::cout << "token: " << lexeme << ", category: " << state->tokenCategory << std::endl;
+            token2CatStream.push_back(token2Cat);
+        }
+        else if (stackStateSentinel == state) 
+        {
+            std::cout << "identify token error. Please carefully check whether RE& NFA config can cover input program!!!\n";
+        }
+        else //if (stackStateSentinel != state && !state->isAccepted)
+        {
+            std::cout << "scanning: the longest matching error!!!";
         }
     }
 
@@ -879,10 +1118,25 @@ scanner(std::map<DFAState*, std::map<char, DFAState* > > dFATable, const std::st
 }
 
 /*
-token stream: test ok
-    ========== tokens: 
+token stream: test1 ok
+========== tokens: 
     token: if , Category: 1
     token: ifa, Category: 2
+
+token stream: test2 ok
+========== tokens: 
+token: a, Category: 2
+token: =, Category: 4
+token: 1, Category: 3
+token: ;, Category: 9
+token: if, Category: 1
+token: (, Category: 7
+token: a, Category: 2
+token: ), Category: 8
+token: a, Category: 2
+token: =, Category: 4
+token: 120, Category: 3
+token: ;, Category: 9
 */
 void printToken2CatStream(std::vector<std::pair<std::string, TokenCategory> > token2CatStream)
 {
@@ -927,8 +1181,23 @@ int main()
     std::vector<Rule> rules;
     Rule rule1 = {"if", "IF"};
     Rule rule2 = {"([a-Z])([a-Z]|[0-9])*", "IDENTIFIER"};
+    Rule rule3 = {"([0-9])([0-9])*", "INTEGER"};
+    Rule rule4 = {"=", "ASSIGN"};
+    Rule rule5 = {"*", "MUL"};
+    Rule rule6 = {"+", "ADD"};
+    Rule rule7 = {"(", "LPARENTHESES"};
+    Rule rule8 = {")", "RPARENTHESES"};
+    Rule rule9 = {";", "SEMICOLON"};
+
     rules.push_back(rule1);
     rules.push_back(rule2);
+    rules.push_back(rule3);
+    rules.push_back(rule4);
+    rules.push_back(rule5);
+    rules.push_back(rule6);
+    rules.push_back(rule7);
+    rules.push_back(rule8);
+    rules.push_back(rule9);
 
     NFA final_nfa = build_if_id_nfa();
     
@@ -938,8 +1207,16 @@ int main()
     std::map<DFAState*, std::map<char, DFAState* > >  dFA = nFA2DFA(final_nfa);
     printDFA(dFA);
 
-    std::string input = "if ifa";
+    // std::string input = "if ifa"; // test1 ok
+    std::string input = "a = 1; if (a) a = 120;"; // test2 ok
     std::vector<std::pair<std::string, TokenCategory> > token2CatStream;
     token2CatStream = scanner(dFA, input, rules);
     printToken2CatStream(token2CatStream);
 }
+
+/*
+PROB: 排查3点：
+[1] 在填 DFATable 时，是否填 d_phi
+[2] ERROR state 是否需要？怎么表示？
+[3] scanner 逻辑不当
+*/
