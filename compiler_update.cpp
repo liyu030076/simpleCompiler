@@ -1217,10 +1217,3 @@ int main()
     token2CatStream = scanner(dFA, input, rules);
     printToken2CatStream(token2CatStream);
 }
-
-/*
-PROB: 排查3点：
-[1] 在填 DFATable 时，是否填 d_phi
-[2] ERROR state 是否需要？怎么表示？
-[3] scanner 逻辑不当
-*/
