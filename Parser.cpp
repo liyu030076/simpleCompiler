@@ -52,19 +52,6 @@ bool isNonTerminal(char c)
     return isupper(c) && c != uniqueStartSymAdded;
 }
 
-void printItem(const Item& item) 
-{
-    std::cout << item.left << " → ";
-    for (int i = 0; i < item.right.size(); ++i) {
-        if (i == item.dotPos) std::cout << "•";
-        std::cout << item.right[i];
-    }
-    if (item.dotPos == item.right.size()) std::cout << "•";
-    std::cout << ", { ";
-    for (char c : item.lookaheads) std::cout << c << " ";
-    std::cout << "}";
-}
-
 // =============
 bool isItemExistInState(const Item& item, const State& state)
 {
@@ -387,65 +374,6 @@ void buildActTblAndGotoTbl()
     }
 }
 
-void printAll(std::set<char> terms, std::set<char>& nonTerms) 
-{
-    std::cout << "\n===== LR(1) all States: =====" << std::endl;
-    for (int i = 0; i < states.size(); ++i) {
-        std::cout << "\n状态 I" << i << ":" << std::endl;
-        for (const auto& item : states[i]) {
-            std::cout << "  ";
-            printItem(item);
-            std::cout << std::endl;
-        }
-    }
-
-    std::cout << "\n===== State Transition Graph: =====" << std::endl;
-    for (const auto& t : stateTransGraph) {
-        int f = t.first.first;
-        char c = t.first.second;
-        int to = t.second;
-        std::cout << "I" << f << " --" << c << "--> I" << to << std::endl;
-    }
-
-    std::cout << "\n===== ActionTable =====" << std::endl;
-    //std::set<char> terms = {'i', '+', '*', '(', ')', eof};
-    std::cout << std::left << std::setw(6) << "State: ";
-    for (char c : terms) 
-        std::cout << std::setw(8) << c;
-    std::cout << std::endl;
-
-    for (int i = 0; i < states.size(); ++i) {
-        std::cout << std::setw(6) << "I" + std::to_string(i);
-        for (char c : terms) 
-        {
-            if (actionTable[i].count(c))
-                std::cout << std::setw(8) << actionTable[i][c];
-            else
-                std::cout << std::setw(8) << "";
-        }
-        std::cout << std::endl;
-    }
-
-    std::cout << "\n===== GotoTable:  =====" << std::endl;
-    //std::set<char> nonTerms = {'E', 'T', 'F'};
-    std::cout << std::left << std::setw(6) << "State: ";
-    for (char c : nonTerms) 
-        std::cout << std::setw(8) << c;
-    std::cout << std::endl;
-
-    for (int i = 0; i < states.size(); ++i) 
-    {
-        std::cout << std::setw(6) << "I" + std::to_string(i);
-        for (char c : nonTerms) {
-            if (gotoTable[i].count(c))
-                std::cout << std::setw(8) << gotoTable[i][c];
-            else
-                std::cout << std::setw(8) << "";
-        }
-        std::cout << std::endl;
-    }
-}
-
 /*
 global var:
     productions
@@ -547,11 +475,46 @@ implement:
         action is reduce: build subTree by add  every ParserTreeNodePtr to related Grammar Symbol in right-side to left Grammar Symbol's ParserTreeNodePtr children.
             Create a NonTerminal Node using the left Grammar Symbol of reduction/production, 
             Pop reduction.right.size() ASTNodePtrs as NonTerminal Node's children, 
-            Reverse NonTerminal Node's children to ensure children is the same sequence as right of the reduction.                 
+            Reverse NonTerminal Node's children to ensure children is the same sequence as right of the reduction.      
+        
+        
+        parserTreeNodeStack: 
+            shift: [a (top)] -> Reduce: [empty -> A (children: a) (top)] -> shift: [A (children: a), a (top)] 
+                -> Reduce: [empty -> A (children: A (children: a), a) ]  -> Accepted: [empty -> G( children: A (children: A (children: a), a) ) ]
+        <=> Parse Tree:
+
+            -> shift:
+                a
+            
+            -> Reduce:
+                A         
+                |
+                a  
+        
+            -> shift:
+                 A   a
+                |
+                a
+
+            -> Reduce:
+                 A
+                / \
+                A   a
+                |
+                a
+
+            -> Accepted:
+                 A
+                / \
+                A   a
+                |
+                a
 */
 /*
 global var:
-
+    actionTable
+    productions
+    gotoTable
 */
 
 #ifdef NEEDPARSERTREE 
@@ -559,7 +522,7 @@ ParserTreeNodePtr
 #else
 void*
 #endif
-parser(std::string input)
+parser(std::string& input)
 {
     std::stack<int> stateIndexStack;
     stateIndexStack.push(0);
@@ -574,7 +537,7 @@ parser(std::string input)
     int nextInputSymPtr = -1;
     int inputLen = input.size();
     input = input + eof;  // add eof for simple process
-    char nextSymInInput;  // nextSymInInput
+    char nextSymInInput;
     while (nextInputSymPtr < inputLen)
     {
         std::cout << "nextInputSymPtr: " << nextInputSymPtr << std::endl;
@@ -609,7 +572,7 @@ parser(std::string input)
 
 #ifdef NEEDPARSERTREE 
                 ParserTreeNodePtr termNode = std::make_shared<ParserTreeNode>(TERMINAL, nextSymInInput);
-                parserTreeNodeStack.push(termNode); // parserTreeNodeStack: [a (top) -> empty -> A (top)]-> [A a (top)]
+                parserTreeNodeStack.push(termNode); 
 #endif 
 
             }
@@ -631,32 +594,6 @@ parser(std::string input)
                     grammarSymStack.pop();
                     stateIndexStack.pop();
 
-                    /*
-
-                    AST:
-                            A         
-                            |
-                            a  
-                    
-                        ->
-
-                             A
-                            / \
-                           A   a
-                           |
-                           a
-                       ->
-                       
-                            G
-                            |
-                            A
-                           / \
-                          A   a
-                          |
-                          a
-
-                        parserTreeNodeStack: [a (top) -> empty -> A (top)] -> [A a (top) -> empty]
-                    */
 #ifdef NEEDPARSERTREE 
                     nonTermNode->addChild(parserTreeNodeStack.top() ); 
                     parserTreeNodeStack.pop();
@@ -666,10 +603,6 @@ parser(std::string input)
 #ifdef NEEDPARSERTREE 
                 // reverse to ensure childs is the same sequence as right of the reduction/production
                 std::reverse(nonTermNode->children.begin(), nonTermNode->children.end() );
-
-                /*
-                    parserTreeNodeStack: [A] -> [A] -> [G]
-                */
                 parserTreeNodeStack.push(nonTermNode);
 #endif 
                 
@@ -705,6 +638,91 @@ parser(std::string input)
         }   
     }
     return nullptr;
+}
+
+void printItem(const Item& item) 
+{
+    std::cout << item.left << " → ";
+    for (int i = 0; i < item.right.size(); ++i) 
+    {
+        if (i == item.dotPos) 
+            std::cout << "•";
+        std::cout << item.right[i];
+    }
+    if (item.dotPos == item.right.size() ) 
+        std::cout << "•";
+    std::cout << ", { ";
+    for (char c : item.lookaheads) 
+        std::cout << c << " ";
+    std::cout << "}";
+}
+
+/*
+global var:
+    states
+    stateTransGraph
+    actionTable
+*/
+void printAll(const std::set<char>& terms, const std::set<char>& nonTerms) 
+{
+    std::cout << "\n===== LR(1) all States: =====" << std::endl;
+    for (int i = 0; i < states.size(); ++i) 
+    {
+        std::cout << "\n状态 I" << i << ":" << std::endl;
+        for (const auto& item : states[i]) 
+        {
+            std::cout << "  ";
+            printItem(item);
+            std::cout << std::endl;
+        }
+    }
+
+    std::cout << "\n===== State Transition Graph: =====" << std::endl;
+    for (const auto& link : stateTransGraph) 
+    {
+        int srcStateIndex = link.first.first;
+        char grammarSym = link.first.second;
+        int dstStateIndex = link.second;
+        std::cout << "I" << srcStateIndex << " --" << grammarSym << "--> I" << dstStateIndex << std::endl;
+    }
+
+    std::cout << "\n===== ActionTable =====" << std::endl;
+    std::cout << std::left << std::setw(6) << "State: ";
+    for (char term : terms) 
+        std::cout << std::setw(8) << term;
+    std::cout << std::endl;
+
+    for (int stateIndex = 0; stateIndex < states.size(); ++stateIndex) 
+    {
+        std::cout << std::setw(6) << "I" + std::to_string(stateIndex);
+        for (char term : terms) 
+        {
+            if (actionTable[stateIndex].count(term) )
+                std::cout << std::setw(8) << actionTable[stateIndex][term];
+            else
+                std::cout << std::setw(8) << "";
+        }
+        std::cout << std::endl;
+    }
+
+    std::cout << "\n===== GotoTable:  =====" << std::endl;
+    std::cout << std::left << std::setw(6) << "State: ";
+    for (char nonTerm : nonTerms) 
+        std::cout << std::setw(8) << nonTerm;
+    std::cout << std::endl;
+
+    for (int stateIndex = 0; stateIndex < states.size(); ++stateIndex) 
+    {
+        std::cout << std::setw(6) << "I" + std::to_string(stateIndex);
+        for (char nonTerm : nonTerms) 
+        {
+            if (gotoTable[stateIndex].count(nonTerm) )
+                std::cout << std::setw(8) << gotoTable[stateIndex][nonTerm];
+            else
+                std::cout << std::setw(8) << "";
+        }
+        std::cout << std::endl;
+    }
 }
 
 #ifdef NEEDPARSERTREE

@@ -57,9 +57,9 @@ ParserTreeNodePtr
 #else
 void*
 #endif
-parser(std::string input);
+parser(std::string& input);
 
-void printAll(std::set<char> terms, std::set<char>& nonTerms);
+void printAll(const std::set<char>& terms, const std::set<char>& nonTerms);
 
 #ifdef NEEDPARSERTREE
 void printAst(const ParserTreeNodePtr& root, int indent = 0);
