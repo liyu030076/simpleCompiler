@@ -15,9 +15,9 @@ int main()
 
     /*
     // ==========2. LR1Parsing 
-    // std::string input = "i * (i + i)";
-    // std::string input = "aa";
-
+    // std::string input = "aa";          // test ok
+    // std::string input = "i * (i + i)"; // test ok
+    
     initGrammar();
 
     buildStatesAndStateTransGraph();
