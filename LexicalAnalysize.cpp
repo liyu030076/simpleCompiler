@@ -654,6 +654,14 @@ nFA2DFA(NFA nfa)
     workList.push_back(d0);
 
     /*
+    std::vector<char> sigma = 
+    {
+        'a', 'i', 'f', 
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+        '=', '*', '+', '(', ')', ';' 
+    };  // simplify test: ok
+    */
+
     std::vector<char> sigma;
     for (char ch = 'A'; ch <= 'Z'; ch++)
         sigma.push_back(ch);
@@ -661,15 +669,12 @@ nFA2DFA(NFA nfa)
         sigma.push_back(ch);
     for (char ch = '0'; ch <= '9'; ch++)
         sigma.push_back(ch);
-
+    sigma.push_back('=');
+    sigma.push_back('*');
     sigma.push_back('+');
-    */
-    std::vector<char> sigma = 
-    {
-        'a', 'i', 'f', 
-        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-        '=', '*', '+', '(', ')', ';' 
-    };  // simplify test: ok
+    sigma.push_back('(');
+    sigma.push_back(')');
+    sigma.push_back(';');
 
     std::map<DFAState*, 
              std::map<char, DFAState* > 
@@ -955,6 +960,20 @@ scanner(std::map<DFAState*, std::map<char, DFAState* > > dFATable, const std::st
                 }
                 else 
                 {
+                    if ('\0' == ch) // scanning end 
+                    {
+                        std::cout << "lexeme.size: " << lexeme.size() << std::endl;
+                        if (lexeme.size() >= 1)
+                        {
+                            std::cout << "Rollback4: scanning end, only remove last character of lexeme." << std::endl;
+                            lexeme.resize(lexeme.size()-1); // remove last character 
+                        }
+
+                        std::pair<std::string, TokenCategory> token2Cat = {lexeme, state->tokenCategory};
+                        std::cout << "token: " << lexeme << ", category: " << state->tokenCategory << std::endl;
+                        token2CatStream.push_back(token2Cat);
+                    }
+
                     state = stateErr; // for state + ch, there isn't valid transition
                 }
             }
@@ -992,6 +1011,7 @@ scanner(std::map<DFAState*, std::map<char, DFAState* > > dFATable, const std::st
         }
         else if ('\0' == ch) // scanning end 
         {
+            /*
             std::cout << "lexeme.size: " << lexeme.size() << std::endl;
             if (lexeme.size() >= 1)
             {
@@ -1002,7 +1022,7 @@ scanner(std::map<DFAState*, std::map<char, DFAState* > > dFATable, const std::st
             std::pair<std::string, TokenCategory> token2Cat = {lexeme, state->tokenCategory};
             std::cout << "token: " << lexeme << ", category: " << state->tokenCategory << std::endl;
             token2CatStream.push_back(token2Cat);
-
+            */
             break;
         }
 

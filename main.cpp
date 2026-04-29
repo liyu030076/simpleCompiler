@@ -4,18 +4,22 @@
 
 int main()
 {
-    /*
-    // std::string input = "if ifa"; // test1 ok
-    std::string input = "a = 1; if (a) a = a * 20 + 120;"; // test2 ok
+    
+    //std::string input = "if ifa"; // test1 ok
+    //std::string input = "a = 1; if (a) a = a * 20 + 120;"; // test2 ok
+    std::string input = "res = 10 * (ab + 120);"; // test3 ok
 
     // ==========1. LexicalAnalysis
     std::vector<std::pair<std::string, TokenCategory> > token2CatStream;
     token2CatStream = LexicalAnalysis(input);
-    */
 
+    /*
     // ==========2. LR1Parsing 
+    // std::string input = "i * (i + i)";
+    // std::string input = "aa";
+
     initGrammar();
-    
+
     buildStatesAndStateTransGraph();
 
     buildActTblAndGotoTbl();
@@ -24,9 +28,6 @@ int main()
     //std::set<char> terms = {'a', eof};
     //std::set<char> nonTerms = {'G', 'A'};
     printAll(terms, nonTerms);
-
-    std::string input = "i * (i + i)";
-    //std::string input = "aa";
 
 #ifdef NEEDPARSERTREE
     ParserTreeNodePtr root = parser(input);
@@ -37,6 +38,7 @@ int main()
 #else
     parser(input);
 #endif
+    */
 
     //LR1Parser parser;
     //parser.parse(token2CatStream);
