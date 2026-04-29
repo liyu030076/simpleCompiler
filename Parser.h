@@ -6,6 +6,8 @@
 #include <memory>
 #include <string>
 
+typedef char GrammarSymType;
+
 /*
 const 全局变量
     C++
@@ -19,7 +21,7 @@ const 全局变量
             错误做法：头文件定义 const -> 多文件包含 必重定义
             正确做法：头文件 extern 声明, 一个源文件定义，其他源文件包含头文件后直接引用
 */
-const char eof = '$'; 
+const GrammarSymType eof = '$'; 
 
 // =============Note: 编译时指定宏: g++ xxx.c -D 宏名
 #ifdef NEEDPARSERTREE
@@ -32,10 +34,10 @@ enum ParserTreeNodeType
 struct ParserTreeNode 
 {
     ParserTreeNodeType nodeType;
-    char grammarSym;                    
+    GrammarSymType grammarSym;                    
     std::vector<std::shared_ptr<ParserTreeNode> > children;  
 
-    ParserTreeNode(ParserTreeNodeType tp, char ch) : nodeType(tp), grammarSym(ch) {}
+    ParserTreeNode(ParserTreeNodeType tp, GrammarSymType ch) : nodeType(tp), grammarSym(ch) {}
 
     void addChild(const std::shared_ptr<ParserTreeNode>& child) 
     {
@@ -59,7 +61,7 @@ void*
 #endif
 parser(std::string& input);
 
-void printAll(const std::set<char>& terms, const std::set<char>& nonTerms);
+void printAll(const std::set<GrammarSymType>& terms, const std::set<GrammarSymType>& nonTerms);
 
 #ifdef NEEDPARSERTREE
 void printAst(const ParserTreeNodePtr& root, int indent = 0);

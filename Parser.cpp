@@ -10,15 +10,15 @@
 
 #include "Parser.h"
 
-char startSymbol = 'S';
-char uniqueStartSymAdded = 'Z';
+GrammarSymType startSymbol = 'S';
+GrammarSymType uniqueStartSymAdded = 'Z';
 
 struct Item 
 {
-    char left;
+    GrammarSymType left;
     std::string right;
     int dotPos; // Note: init. value is 0
-    std::set<char> lookaheads;
+    std::set<GrammarSymType> lookaheads;
 
     bool operator==(const Item& other) const 
     {
@@ -34,20 +34,20 @@ struct Item
 
 typedef std::vector<Item> State;
 
-std::vector<std::pair<char, std::string> > productions;
+std::vector<std::pair<GrammarSymType, std::string> > productions;
 std::map<std::string, int> prodStr2IndexMap;
 
 std::vector<State> states; // state vector/array: store states in sequence, used when lookup GotoTable and ActionTable 
-std::map<std::pair<int, char>, int> stateTransGraph; // < {srcStateIndex, GrammarSym}, dstStateInex>
-std::map<int, std::map<char, std::string> > actionTable; // <srcStateIndex, {terminal, choice_reduceOrShiftOrAccOrErr}>
-std::map<int, std::map<char, int> > gotoTable;
+std::map<std::pair<int, GrammarSymType>, int> stateTransGraph; // < {srcStateIndex, GrammarSym}, dstStateInex>
+std::map<int, std::map<GrammarSymType, std::string> > actionTable; // <srcStateIndex, {terminal, choice_reduceOrShiftOrAccOrErr}>
+std::map<int, std::map<GrammarSymType, int> > gotoTable;
 
-bool isTerminal(char c) 
+bool isTerminal(GrammarSymType c) 
 {
     return islower(c) || c == eof || c == '+' || c == '*' || c == '(' || c == ')';
 }
 
-bool isNonTerminal(char c) 
+bool isNonTerminal(GrammarSymType c) 
 {
     return isupper(c) && c != uniqueStartSymAdded;
 }
@@ -101,7 +101,7 @@ void closure(State& state) // STL container (std::vecror): 不需要 独立副�
         itemQue.pop();
 
         // [2.2] get dotNextGramarSym
-        char dotNextGramarSym = curItem.right[curItem.dotPos];
+        GrammarSymType dotNextGramarSym = curItem.right[curItem.dotPos];
 
         // [2.3] closure doesn't generate new item for the item whose dot(placeholder) has reached the end, or whose dotNextGramarSym is terminal. 
         if (curItem.dotPos >= curItem.right.size() || 
@@ -110,12 +110,12 @@ void closure(State& state) // STL container (std::vecror): 不需要 独立副�
 
         // [2.4] calculate lookahead dotNextGramSym_FollowGramSym_FirstSet for items whose 
         std::string dotNextGramSym_FollowGramSym_StartStr = curItem.right.substr(curItem.dotPos + 1);
-        std::set<char> dotNextGramSym_FollowGramSym_FirstSet;
+        std::set<GrammarSymType> dotNextGramSym_FollowGramSym_FirstSet;
         if (dotNextGramSym_FollowGramSym_StartStr.empty() )
             dotNextGramSym_FollowGramSym_FirstSet = curItem.lookaheads;
         else
         {
-            char dotNextGramSym_FollowGramSym = dotNextGramSym_FollowGramSym_StartStr[0]; // A -> .Aa, eof => dotNextGramSym_FollowGramSym = a
+            GrammarSymType dotNextGramSym_FollowGramSym = dotNextGramSym_FollowGramSym_StartStr[0]; // A -> .Aa, eof => dotNextGramSym_FollowGramSym = a
 
             if ( isTerminal(dotNextGramSym_FollowGramSym) )
                 dotNextGramSym_FollowGramSym_FirstSet.insert(dotNextGramSym_FollowGramSym);
@@ -158,7 +158,7 @@ void closure(State& state) // STL container (std::vecror): 不需要 独立副�
     栈变量（容器）必须以 独立副本 返回 => 1] 返回值用 值传递 -> 且想 接管（效率高）容器副本中的元素 => 2] return std::move(容器独立副本);
     容器 curState: 只读 => 用 const State& 传递
 */
-State buildTransDstState(const State& curState, char grammarSym) // STL container (std::vecror): 不需要 独立副本时，用 引用传递 -> 且 想修改 容器 => 用 non-const 引用
+State buildTransDstState(const State& curState, GrammarSymType grammarSym) // STL container (std::vecror): 不需要 独立副本时，用 引用传递 -> 且 想修改 容器 => 用 non-const 引用
 {
     // [1] For the current state, only its items whose next symbol (of the placeholder) is equal to the given grammarSym truly contribute to transDstState, 
     //     so the transDstState is initialized to the set of those items.
@@ -237,7 +237,7 @@ void buildStatesAndStateTransGraph()
         stateIndexQue.pop();
 
         // [3.2] traverse all items in current state where dotPos hasn't reached the end of the right-hand side, to get their dotNextSyms.
-        std::set<char> curStateDotNextGrammarSyms;
+        std::set<GrammarSymType> curStateDotNextGrammarSyms;
         for (const auto& item : states[curStateIndex]) 
         {
             if (item.dotPos < item.right.size() )
@@ -256,7 +256,7 @@ void buildStatesAndStateTransGraph()
                     Push transDstState index to stateIndexQue.
                 4] link current state (index) to transDstState.
         */
-        for (char dotNextGramarSym: curStateDotNextGrammarSyms)
+        for (GrammarSymType dotNextGramarSym: curStateDotNextGrammarSyms)
         {
             State transDstState = buildTransDstState(states[curStateIndex], dotNextGramarSym);
             if (transDstState.empty() ) 
@@ -288,7 +288,7 @@ void fillGotoTable(int stateIndex)
     for (const auto& link : stateTransGraph) 
     {
         int srcStateInex = link.first.first;
-        char grammarSym = link.first.second;
+        GrammarSymType grammarSym = link.first.second;
         int dstStateIndex = link.second;
         if (srcStateInex == stateIndex && isNonTerminal(grammarSym) ) 
         {
@@ -323,7 +323,7 @@ void fillActionTable(int stateIndex, const State& state)
     {
         if (item.dotPos < item.right.size() ) // shift
         {
-            char dotNextGramarSym = item.right[item.dotPos];
+            GrammarSymType dotNextGramarSym = item.right[item.dotPos];
             if (isTerminal(dotNextGramarSym) && stateTransGraph.count({stateIndex, dotNextGramarSym}) ) 
             {
                 int transDstStateIndex = stateTransGraph[{stateIndex, dotNextGramarSym}];
@@ -336,7 +336,7 @@ void fillActionTable(int stateIndex, const State& state)
         {
             if (item.left == uniqueStartSymAdded) // accepted
             {
-                for (char lookahead: item.lookaheads) 
+                for (GrammarSymType lookahead: item.lookaheads) 
                     if (isTerminal(lookahead) ) // ======optimize: only terminal and eof (viewed as terminal) is vaild col in ActionTable
                         actionTable[stateIndex][lookahead] = "acc";
             } 
@@ -344,7 +344,7 @@ void fillActionTable(int stateIndex, const State& state)
             {
                 std::string prodStr = std::string(1, item.left) + "→" + item.right;
                 int prodIndex = prodStr2IndexMap[prodStr];
-                for (char lookahead: item.lookaheads)
+                for (GrammarSymType lookahead: item.lookaheads)
                     if (isTerminal(lookahead) )
                         actionTable[stateIndex][lookahead] = "r" + std::to_string(prodIndex);
             }
@@ -362,8 +362,8 @@ void buildActTblAndGotoTbl()
 {
     for (int stateIndex = 0; stateIndex < states.size(); ++stateIndex) 
     {
-        actionTable[stateIndex] = std::map<char, std::string>();
-        gotoTable[stateIndex] = std::map<char, int>();
+        actionTable[stateIndex] = std::map<GrammarSymType, std::string>();
+        gotoTable[stateIndex] = std::map<GrammarSymType, int>();
     }
 
     for (int stateIndex = 0; stateIndex < states.size(); ++stateIndex) 
@@ -528,7 +528,7 @@ parser(std::string& input)
     stateIndexStack.push(0);
     int curStateIndex = 0;
 
-    std::stack<char> grammarSymStack;
+    std::stack<GrammarSymType> grammarSymStack;
 
 #ifdef NEEDPARSERTREE 
     std::stack<ParserTreeNodePtr> parserTreeNodeStack;
@@ -537,7 +537,7 @@ parser(std::string& input)
     int nextInputSymPtr = -1;
     int inputLen = input.size();
     input = input + eof;  // add eof for simple process
-    char nextSymInInput;
+    GrammarSymType nextSymInInput;
     while (nextInputSymPtr < inputLen)
     {
         std::cout << "nextInputSymPtr: " << nextInputSymPtr << std::endl;
@@ -582,7 +582,7 @@ parser(std::string& input)
 
                 // 1]
                 int prodIndex = std::stoi(action.substr(1) );
-                char reductionNonTerminal = productions[prodIndex].first;   // reduction/production left 
+                GrammarSymType reductionNonTerminal = productions[prodIndex].first;   // reduction/production left 
                 std::string reductionRight = productions[prodIndex].second; // reduction/production right
 
 #ifdef NEEDPARSERTREE 
@@ -652,7 +652,7 @@ void printItem(const Item& item)
     if (item.dotPos == item.right.size() ) 
         std::cout << "•";
     std::cout << ", { ";
-    for (char c : item.lookaheads) 
+    for (GrammarSymType c : item.lookaheads) 
         std::cout << c << " ";
     std::cout << "}";
 }
@@ -663,7 +663,7 @@ global var:
     stateTransGraph
     actionTable
 */
-void printAll(const std::set<char>& terms, const std::set<char>& nonTerms) 
+void printAll(const std::set<GrammarSymType>& terms, const std::set<GrammarSymType>& nonTerms) 
 {
     std::cout << "\n===== LR(1) all States: =====" << std::endl;
     for (int i = 0; i < states.size(); ++i) 
@@ -681,21 +681,21 @@ void printAll(const std::set<char>& terms, const std::set<char>& nonTerms)
     for (const auto& link : stateTransGraph) 
     {
         int srcStateIndex = link.first.first;
-        char grammarSym = link.first.second;
+        GrammarSymType grammarSym = link.first.second;
         int dstStateIndex = link.second;
         std::cout << "I" << srcStateIndex << " --" << grammarSym << "--> I" << dstStateIndex << std::endl;
     }
 
     std::cout << "\n===== ActionTable =====" << std::endl;
     std::cout << std::left << std::setw(6) << "State: ";
-    for (char term : terms) 
+    for (GrammarSymType term : terms) 
         std::cout << std::setw(8) << term;
     std::cout << std::endl;
 
     for (int stateIndex = 0; stateIndex < states.size(); ++stateIndex) 
     {
         std::cout << std::setw(6) << "I" + std::to_string(stateIndex);
-        for (char term : terms) 
+        for (GrammarSymType term : terms) 
         {
             if (actionTable[stateIndex].count(term) )
                 std::cout << std::setw(8) << actionTable[stateIndex][term];
@@ -707,14 +707,14 @@ void printAll(const std::set<char>& terms, const std::set<char>& nonTerms)
 
     std::cout << "\n===== GotoTable:  =====" << std::endl;
     std::cout << std::left << std::setw(6) << "State: ";
-    for (char nonTerm : nonTerms) 
+    for (GrammarSymType nonTerm : nonTerms) 
         std::cout << std::setw(8) << nonTerm;
     std::cout << std::endl;
 
     for (int stateIndex = 0; stateIndex < states.size(); ++stateIndex) 
     {
         std::cout << std::setw(6) << "I" + std::to_string(stateIndex);
-        for (char nonTerm : nonTerms) 
+        for (GrammarSymType nonTerm : nonTerms) 
         {
             if (gotoTable[stateIndex].count(nonTerm) )
                 std::cout << std::setw(8) << gotoTable[stateIndex][nonTerm];
