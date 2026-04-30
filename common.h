@@ -3,7 +3,7 @@
 
 enum TokenCategory
 {
-    IF = 1,
+    IF = 0,
     IDENTIFIER,
     INTEGER,
     ASSIGN,
@@ -12,6 +12,7 @@ enum TokenCategory
     LPARENTHESES,
     RPARENTHESES,
     SEMICOLON,
+    SENTINEL, // Note: no use for lexical analyser, only user for parser
     IVALID_TOKEN_CATEGORY
 };
 

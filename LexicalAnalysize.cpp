@@ -616,19 +616,6 @@ NFA -> DFA: Subset Construction algorithm
             // else do nothing // 这种情况下，一次 while 迭代后， Worklist 变小。最后，WorkList 为空。
 */
 
-/*
-NFA: test ok
-
-    DFA state(d)	NFA states   		epsilon-closure(delt(d, x))
-                                        x = a  		x = i   	x = f
-                                
-    d0              {n0}           		d1       	d2      	d1
-    d1              {n3, n4}            d1          d1          d1
-    d2              {n3, n1, n4}        d1          d1          d1 | n2 = d3 = {n3, n4, n2} 
-    d3              {n3, n4, n2}        d1          d1          d1 
-
-*/
-
 std::map<DFAState*, std::map<char, DFAState* > > 
 nFA2DFA(NFA nfa)
 {
@@ -652,15 +639,6 @@ nFA2DFA(NFA nfa)
     std::vector<DFAState* > workList;
     fullList.push_back(d0);
     workList.push_back(d0);
-
-    /*
-    std::vector<char> sigma = 
-    {
-        'a', 'i', 'f', 
-        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-        '=', '*', '+', '(', ')', ';' 
-    };  // simplify test: ok
-    */
 
     std::vector<char> sigma;
     for (char ch = 'A'; ch <= 'Z'; ch++)
@@ -788,27 +766,6 @@ nFA2DFA(NFA nfa)
     return DFATable;
 }
 
-/*
-DFA: test1 ok:
-    dFA size: 4
-    DFA state id: 1 <-> NFA state id: 0
-    -- char: a--> DFA state id: 2
-    -- char: f--> DFA state id: 2
-    -- char: i--> DFA state id: 3
-    DFA state id: 2 <-> NFA state id: 3, 4
-    -- char: a--> DFA state id: 2
-    -- char: f--> DFA state id: 2
-    -- char: i--> DFA state id: 2
-    DFA state id: 3 <-> NFA state id: 1, 3, 4
-    -- char: a--> DFA state id: 2
-    -- char: f--> DFA state id: 4
-    -- char: i--> DFA state id: 2
-    DFA state id: 4 <-> NFA state id: 2, 3, 4
-    -- char: a--> DFA state id: 2
-    -- char: f--> DFA state id: 2
-    -- char: i--> DFA state id: 2
-
-*/
 void printDFA(std::map<DFAState*, std::map<char, DFAState* > >  dFA) 
 {
     std::cout << "dFA size: " << dFA.size() << std::endl;
@@ -939,41 +896,42 @@ scanner(std::map<DFAState*, std::map<char, DFAState* > > dFATable, const std::st
                 stateStack.push(stackStateSentinel);     
             }
                 
-            stateStack.push(state); // first time: push from out of while; then: find a transition / new valid state, the push in next iteration. 
+            stateStack.push(state); // first time: push from out of while; then: find a transition / new valid state, push in next iteration. 
             std::cout << "=====move to state id:" << state->id << std::endl;
 
             std::cout << "ch:" << ch << ", lexeme: " << lexeme << std::endl;
             if (' ' == ch) // whitespaces character(blank、\n、\t) doesn't need to enter DFA matching，directly ignored(continue next token matching) is more efficient.
             {
-                break;
+                break; // break 只认 switch/for/while: 当前 lexeme 处理结束
+            }
+            else if ('\0' == ch) // scanning end 
+            {
+                std::cout << "lexeme.size: " << lexeme.size() << std::endl;
+                if (lexeme.size() >= 1)
+                {
+                    std::cout << "Rollback4: scanning end, only remove last character of lexeme." << std::endl;
+                    lexeme.resize(lexeme.size()-1); // remove last character 
+                }
+
+                std::pair<std::string, TokenCategory> token2Cat = {lexeme, state->tokenCategory};
+                std::cout << "token: " << lexeme << ", category: " << state->tokenCategory << std::endl;
+                token2CatStream.push_back(token2Cat);
+
+                break; // 跳出内层 while
             }
 
             auto iter1 = dFATable.find(state); 
-            if (iter1 != dFATable.end() ) // the state row in DFATable is not empty => there is at least one transition for some character in sigma
+            if (iter1 != dFATable.end() ) // the state row in DFATable is not empty => the (current) state is not the last accepted state, there is at least one transition for some character in sigma
             {
                 auto sym2State = iter1->second;
 
                 auto iter2 = sym2State.find(ch);
-                if (iter2 != sym2State.end() )
+                if (iter2 != sym2State.end() ) // And, for the current read char, based on current state, there is a valid outgoing transition (dst state)
                 {
-                    state = iter2->second; // find new state => there is valid transition
+                    state = iter2->second;     // find new state => there is valid transition
                 }
-                else 
+                else                           // But, for the current read char, based on current state, there is no outgoing transition (dst state)
                 {
-                    if ('\0' == ch) // scanning end 
-                    {
-                        std::cout << "lexeme.size: " << lexeme.size() << std::endl;
-                        if (lexeme.size() >= 1)
-                        {
-                            std::cout << "Rollback4: scanning end, only remove last character of lexeme." << std::endl;
-                            lexeme.resize(lexeme.size()-1); // remove last character 
-                        }
-
-                        std::pair<std::string, TokenCategory> token2Cat = {lexeme, state->tokenCategory};
-                        std::cout << "token: " << lexeme << ", category: " << state->tokenCategory << std::endl;
-                        token2CatStream.push_back(token2Cat);
-                    }
-
                     state = stateErr; // for state + ch, there isn't valid transition
                 }
             }
@@ -987,6 +945,7 @@ scanner(std::map<DFAState*, std::map<char, DFAState* > > dFATable, const std::st
             }
         } 
         
+        // Note: 循环的退出条件 = 循环判断条件 | 循环提前 break 的条件
         if (' ' == ch) 
         {
             if (state->isAccepted) // such as blank just next a valid token 
@@ -1009,31 +968,7 @@ scanner(std::map<DFAState*, std::map<char, DFAState* > > dFATable, const std::st
 
             continue;
         }
-        else if ('\0' == ch) // scanning end 
-        {
-            /*
-            std::cout << "lexeme.size: " << lexeme.size() << std::endl;
-            if (lexeme.size() >= 1)
-            {
-                std::cout << "Rollback4: scanning end, only remove last character of lexeme." << std::endl;
-                lexeme.resize(lexeme.size()-1); // remove last character 
-            }
-
-            std::pair<std::string, TokenCategory> token2Cat = {lexeme, state->tokenCategory};
-            std::cout << "token: " << lexeme << ", category: " << state->tokenCategory << std::endl;
-            token2CatStream.push_back(token2Cat);
-            */
-            break;
-        }
-
-        //if (REs_NFA_configError)
-        //{
-        //    std::cout << "end scanning in advance because of REs_NFA_configError. Please carefully check whether RE& NFA config can cover input program!!!\n";
-        //    break;
-        //}
-
-        // Note: 循环的退出条件 = 循环判断条件 | 循环提前 break 的条件
-        if (state == stateErr) // strict 2 dimension DFATable, 正常 REs & NFA 配置下, 必然进。即 第1个 while 循环结束时，state 必然是 错误状态 Se，但 Se 并未入栈。
+        else if (state == stateErr) // strict 2 dimension DFATable, 正常 REs & NFA 配置下, 必然进。即 第1个 while 循环结束时，state 必然是 错误状态 Se，但 Se 并未入栈。
         {
             std::cout << "lexeme.size: " << lexeme.size() << std::endl;
             if (lexeme.size() >= 1)
@@ -1043,7 +978,7 @@ scanner(std::map<DFAState*, std::map<char, DFAState* > > dFATable, const std::st
                 Rollback(input);                // move the pointer in lexeme to the previous character
             }
         }
-        else //if (stateTransitionsAllEmpty) // DFATable space compress, if the state (transitions) row is all all d_phi, we don't fill this state to DFATable.
+        else if (stateTransitionsAllEmpty) // DFATable space compress, if the state (transitions) row is all all d_phi, we don't fill this state to DFATable.
         {
             std::cout << "lexeme.size: " << lexeme.size() << std::endl;
             if (lexeme.size() >= 1)
@@ -1052,6 +987,10 @@ scanner(std::map<DFAState*, std::map<char, DFAState* > > dFATable, const std::st
                 lexeme.resize(lexeme.size()-1); // remove last character 
                 Rollback(input);                // move the pointer in lexeme to the previous character
             }
+        }
+        else if ('\0' == ch) // scanning end 
+        {
+            break; // 跳出 外层 while: 整个输入处理结束
         }
 
         // 回退：最终到达 the last latest accept state 或 NULL state
@@ -1125,31 +1064,6 @@ scanner(std::map<DFAState*, std::map<char, DFAState* > > dFATable, const std::st
     return token2CatStream;
 }
 
-/*
-token stream: test1 ok
-========== tokens: 
-    token: if , Category: 1
-    token: ifa, Category: 2
-
-token stream: test2 ok
-========== tokens: 
-token: a, Category: 2
-token: =, Category: 4
-token: 1, Category: 3
-token: ;, Category: 9
-token: if, Category: 1
-token: (, Category: 7
-token: a, Category: 2
-token: ), Category: 8
-token: a, Category: 2
-token: =, Category: 4
-token: a, Category: 2
-token: *, Category: 5
-token: 20, Category: 3
-token: +, Category: 6
-token: 120, Category: 3
-token: ;, Category: 9
-*/
 void printToken2CatStream(std::vector<std::pair<std::string, TokenCategory> > token2CatStream)
 {
     std::cout << "========== tokens: \n";
