@@ -53,14 +53,14 @@ void initGrammar()
         {getNonTerminalSym(Pro), {getNonTerminalSym(Statement)} },                                                                              // Program → Statement
         // {getNonTerminalSym(Statement), {getTerminalSym(IF), getTerminalSym(LPARENTHESES), getNonTerminalSym(Expr), getTerminalSym(RPARENTHESES), getNonTerminalSym(Statement)} },  // S → if(E)S  // hasn't support if statement
         {getNonTerminalSym(Statement), {getNonTerminalSym(ASSIG)} },                                                                            // Statement → ASSIG
-        {getNonTerminalSym(ASSIG), {getTerminalSym(IDENTIFIER), getTerminalSym(ASSIGN), getNonTerminalSym(Expr), getTerminalSym(SEMICOLON)} },  // ASSIG → identifier = Expr;
-        {getNonTerminalSym(Expr), {getNonTerminalSym(Expr), getTerminalSym(ADD), getNonTerminalSym(Term)} },                                    // Expr → Expr + Term
-        {getNonTerminalSym(Expr), {getNonTerminalSym(Term)} },                                                                                  // Expr → Term
-        {getNonTerminalSym(Term), {getNonTerminalSym(Term), getTerminalSym(MUL), getNonTerminalSym(Factor)} },                                  // Term → Term * Factor
-        {getNonTerminalSym(Term), {getNonTerminalSym(Factor)} },                                                                                // Term → Factor
-        {getNonTerminalSym(Factor), {getTerminalSym(INTEGER)} },                                                                                // Factor → integer
-        {getNonTerminalSym(Factor), {getTerminalSym(IDENTIFIER)} },                                                                             // Factor → identifier
-        {getNonTerminalSym(Factor), {getTerminalSym(LPARENTHESES), getNonTerminalSym(Expr), getTerminalSym(RPARENTHESES)} }                     // Factor → (Expr)
+        {getNonTerminalSym(ASSIG), {getTerminalSym(IDENTIFIER), getTerminalSym(ASSIGN), getNonTerminalSym(Expr), getTerminalSym(SEMICOLON)} },  // ASSIG → identifier = Expr;   
+        {getNonTerminalSym(Expr), {getNonTerminalSym(Expr), getTerminalSym(ADD), getNonTerminalSym(Term)} },                                    // Expr → Expr + Term           rule3
+        {getNonTerminalSym(Expr), {getNonTerminalSym(Term)} },                                                                                  // Expr → Term                  rule4
+        {getNonTerminalSym(Term), {getNonTerminalSym(Term), getTerminalSym(MUL), getNonTerminalSym(Factor)} },                                  // Term → Term * Factor         rule5
+        {getNonTerminalSym(Term), {getNonTerminalSym(Factor)} },                                                                                // Term → Factor                rule6
+        {getNonTerminalSym(Factor), {getTerminalSym(INTEGER)} },                                                                                // Factor → integer             rule7
+        {getNonTerminalSym(Factor), {getTerminalSym(IDENTIFIER)} },                                                                             // Factor → identifier          rule8
+        {getNonTerminalSym(Factor), {getTerminalSym(LPARENTHESES), getNonTerminalSym(Expr), getTerminalSym(RPARENTHESES)} }                     // Factor → (Expr)              rule9
     };
 }
 
@@ -378,6 +378,201 @@ void buildActTblAndGotoTbl()
     }
 }
 
+void shiftOpForAST(std::stack<ASTNodePtr>& astRootsPtrStack, const Token2Cat& nextToken2Cat)
+{
+    ASTNodePtr subRoot; // Note: std::unique_ptr default value is empty, == nullptr
+    if (IDENTIFIER == nextToken2Cat.second) 
+    {
+        subRoot = std::make_unique<IdentNode>(nextToken2Cat.first);
+        std::cout << "===========IDENTIFIER: root addr: " << subRoot.get() << std::endl;
+    }
+    else if (INTEGER == nextToken2Cat.second) 
+    {
+        subRoot = std::make_unique<IntegerNode>(std::stoi(nextToken2Cat.first) );
+        std::cout << "==========INTEGER: root addr: " << subRoot.get() << std::endl;
+    }
+    /*
+    else if (MUL == nextToken2Cat.second ||
+            ADD == nextToken2Cat.second ||
+            LPARENTHESES == nextToken2Cat.second ||
+            RPARENTHESES == nextToken2Cat.second ||
+            SEMICOLON == nextToken2Cat.second
+        ) // operator '(' ')' ';' 不需要创建AST节点，push nullptr to astRootsPtrStack()
+    {
+        // doNothing
+    }
+    */
+    std::cout << "shiftOpForAST: root addr: " << subRoot.get() << std::endl;
+    if (subRoot)
+    {
+        astRootsPtrStack.push(std::move(subRoot) );
+    }
+}
+
+void getValidChildren(std::stack<ASTNodePtr>& astRootsPtrStack, int prodIndex, std::vector<ASTNodePtr>& children)
+{
+    switch (static_cast<PRODUCTIONINDEX>(prodIndex) )
+    {
+        // case UnActualActionForCodeGen:
+        case PRODUCTIONINDEX::TERM_REDUCED2_EXPR:
+        case PRODUCTIONINDEX::FACTOR_REDUCED2_TERM:
+        case PRODUCTIONINDEX::PARENTHESIS_REDUCED2_FACTOR:
+        case PRODUCTIONINDEX::ASSIGN_REDUCED2_STATEMENT: 
+        // Note: for the previous, actually don't need to create anyNode
+        // case the node has already created when shift
+        // Note: the following, node already created when shift. diff from SDT(语法制导翻译)
+        case PRODUCTIONINDEX::INTERGE_REDUCED2_FACTOR:                   
+        case PRODUCTIONINDEX::IDENT_REDUCED2_FACTOR:
+        {
+            std::cout << "======prodIndex: " << prodIndex << " astRootsPtrStack Top NodeCat: " << 
+                static_cast<int>(astRootsPtrStack.top()->category) << std::endl;
+            children.insert(children.begin(), std::move(astRootsPtrStack.top() ) );
+            astRootsPtrStack.pop();
+            break;
+        }
+        case PRODUCTIONINDEX::MUL:
+        case PRODUCTIONINDEX::ADD:
+        case PRODUCTIONINDEX::ASSIGN:
+        {
+            for (int childrenIndex = 0; childrenIndex < 2; childrenIndex++) // Note: 2 个有效子节点
+            {
+                std::cout << "========prodIndex: " << prodIndex << " astRootsPtrStack Top NodeCat: " << 
+                    static_cast<int>(astRootsPtrStack.top()->category) << std::endl;
+                children.insert(children.begin(), std::move(astRootsPtrStack.top() ) );
+                astRootsPtrStack.pop();
+            }
+            break;
+        }
+        case PRODUCTIONINDEX::STATEMENT_REDUCED2_PROG: 
+        {
+            std::cout << "========prodIndex: " << prodIndex << " astRootsPtrStack Top NodeCat: " << 
+                static_cast<int>(astRootsPtrStack.top()->category) << std::endl;
+            children.insert(children.begin(), std::move(astRootsPtrStack.top() ) );
+            astRootsPtrStack.pop();
+            break;
+        }
+    }
+}
+
+ASTNodePtr CreateBinaryOpNode(std::vector<ASTNodePtr>& children, const std::string& op)
+{
+    ASTNodePtr parent = std::make_unique<BinaryOpNode>(std::move(children[0]), std::move(children[1]), op);
+    return parent; // optimize: tell compiler to do NRVO, compiler may do NRVO.
+    // return std::make_unique<BinaryOpNode>(std::move(children[0]), std::move(children[1]), op);
+}
+
+/*
+    设计方案：
+        在 有效 shift((not corresponds to operator/'('/')'/';' token)) 时，创建 ASTLeafNode;
+        在 reduce is from Integer/Ident to Factor 时，
+            1] 先 extract 出 stack.Top(), added to children node, then Pop.
+            2] use these children and the production index to get/create parent node
+            3] Push the parent node to the stack, which serves as the new root
+
+
+    SDT(语法制导翻译) 不同：
+        SDT 在 shift 时，不创建 ASTNode;
+            在 reduce from Integer/Ident to Factor 时，创建 ASTLeafNode。
+
+    Note:
+        编译器可选优化（GCC/Clang/MSVC 通常会做）
+            RVO/NRVO: 消除返回对象时(2次)不必要的 拷贝/移动，直接在 caller 的内存位置 构造 对象，提升性能。
+                RVO (Return Value Optimization)
+                    返回临时对象
+                        eg. return T();
+                NRVO (Named ...)
+                    返回具名局部变量
+                        eg. 
+                            T x; 
+                            return x; 
+
+                eg.
+                    1] 若 compiler 无优化（两次拷贝 / 移动）
+                        T f() 
+                        {
+                            T x;        // [1] 构造 x（函数内）
+                            return x;   // [2] 拷贝/移动 到 临时返回值
+                        }
+
+                        T y = f();      // [3] 拷贝/移动临时到 y
+                    
+                    2] 若 compiler 进行了 NRVO 优化（零拷贝/移动，而是用一次 直接构造）
+                        T f() 
+                        {
+                            T x;      // [1] 构造 x（函数内）
+                            return x; // [2] 无拷贝/移动
+                        }
+
+                        T y = f();   // [3] 无 copy/move，而是 直接在 y 的位置（用 f() 中的 local x）构造 y。
+
+            NRVO 可能生效条件（缺一不可）
+                1] return the same type of (no-volatile) local var 
+                2] return the same named local variable on all return paths
+*/
+ASTNodePtr getParentNode(int prodIndex, std::vector<ASTNodePtr>& children)
+{
+    ASTNodePtr parent;
+
+    switch (static_cast<PRODUCTIONINDEX>(prodIndex) )
+    {
+        // case UnActualActionForCodeGen:
+        case PRODUCTIONINDEX::TERM_REDUCED2_EXPR:
+        case PRODUCTIONINDEX::FACTOR_REDUCED2_TERM:
+        case PRODUCTIONINDEX::PARENTHESIS_REDUCED2_FACTOR:
+        case PRODUCTIONINDEX::ASSIGN_REDUCED2_STATEMENT: 
+        // Note: for the previous, actually don't need to create anyNode
+        // case the node has already created when shift
+        // Note: the following, node already created when shift. diff from SDT(语法制导翻译)
+        case PRODUCTIONINDEX::INTERGE_REDUCED2_FACTOR:                   
+        case PRODUCTIONINDEX::IDENT_REDUCED2_FACTOR:
+            parent = std::move(children[0]);
+            break;    
+            //return std::move(children[0]); // the unique subroot is automatically upgraded to(自动升级为) the root of growing AST.  
+        case PRODUCTIONINDEX::MUL:
+            parent = CreateBinaryOpNode(children, "*"); 
+            break;
+            //return CreateBinaryOpNode(children, "*");    
+        case PRODUCTIONINDEX::ADD:
+            parent = CreateBinaryOpNode(children, "+");
+            break;
+            //return CreateBinaryOpNode(children, "+");
+        case PRODUCTIONINDEX::ASSIGN:
+            parent = CreateBinaryOpNode(children, "=");
+            break;
+            //return CreateBinaryOpNode(children, "=");  
+        case PRODUCTIONINDEX::STATEMENT_REDUCED2_PROG: 
+        {
+            auto prog = std::make_unique<ProgramNode>();
+            prog->stmts.push_back(std::move(children[0]) );
+            parent = std::move(prog); // Note: std::unique_ptr<Derived> will be implicitly converted to std::unique_ptr<Base>. Requirment: Base must has virtial Dtor.
+            break;
+            //auto prog = std::make_unique<ProgramNode>();
+            //prog->stmts.push_back(std::move(children[0]) );
+            //return std::move(prog); // Note: Local obj which supports move semantics, such as unique_ptr, can be returned directly, compiler will automatically move. However, Explicitly use std::move may suppress NRVO optimization 
+        }
+        default:
+            //return std::move(children[0]);
+            parent = std::move(children[0]);
+            break;
+    }
+    return parent; // optimize: tell compiler to do NRVO, compiler may do NRVO.
+}
+
+void reduceOpForAST(std::stack<ASTNodePtr>& astRootsPtrStack, int prodIndex)
+{
+    std::vector<ASTNodePtr> children;
+    getValidChildren(astRootsPtrStack, prodIndex, children);
+    std::cout << "reduceOpForAST: children: \n";
+    for (const auto& child: children)
+    {
+        std::cout << "==========prodIndex: " << prodIndex << " astRootsPtrStack Top NodeCat: " << 
+            static_cast<int>(child->category) << std::endl;
+    }
+    
+    ASTNodePtr parent = getParentNode(prodIndex, children);
+    astRootsPtrStack.push(std::move(parent) );
+}
+
 /*
 Pseudo Code
     stack.push(s0)
@@ -421,11 +616,11 @@ Pseudo Code
 /*
 implement:
 
-    [1] create two stacks:
+    (1) create two stacks:
         stateIndexStack: stores state (indices) in reverse order along the parsing path in the state transition graph
         grammarSymStack: stores grammar symbols in reverse order along the parsing path in the state transition graph
 
-    [2] for every valid nextSymInInput in input: 
+    (2) for every valid nextSymInInput in input: 
 
         base on [curStateIndex][nextSymInInput] to lookup ActionTable to get action,
         
@@ -440,10 +635,84 @@ implement:
                move to the transDst state (index) 
             3] reductionNonTerminal / curStateIndex Pushed to grammarSymStack / stateIndexStack
 
-    [3] ASTNodePtrStack: 
+    (3) astRootsPtrStack: 
+        [1] After a valid(not corresponds to operator/'('/')'/';' token) shift, push the current subRoot of the growing AST to the stack.
+            Concretely, after a valid shift, make the corresponding ASTLeafNode, push it to the stack.
+            The ASTLeafNode is relative to the parent ASTNode that will be created by later reduction that contributes to actual action(实际行为) for CodeGen.
+
+            => After a shift, the stack stores multiple subRoots of the current AST in reverse order(left/right child is in the bottom/top).
+
+        [2] After a reduce, the stack stores only the current root of the growing AST.
+
+            if reduced by the rule that contribute to actual action(operator token) for CodeGen:
+                1] Iterate as many times as the number of operands in the rule.
+                   In each iteration,
+                        extract the Top of the stack, 
+                        add this subNode/subRoot to the children in reverse order, 
+                        then Pop. 
+                
+                2] Create corresponding parent node that corresponds to actual action (operator token of the rule).
+                   which serves as the new root.
+
+                3] Push the parent(new root) to the statk.
+
+            else if ... doesn't contribute to actual action for CodeGen = only Grammar substitution:
+                don't Create node 
+                => the unique(唯一的) subRoot in the stack is automatically upgraded to(自动升级为) the root of growing AST.
+
+        [3] When Accepted, extract the Top of the stack, that is the final root of the final AST.
+
+        === detail:
+        [1] when shift
+            
+            if (token.Cataegory == IDENTIFIER || INTEGER)
+                1] correspondingASTLeafNode = CreateCorrespondingASTLeafNode(token.value)
+                                           CreateIdentASTLeafNode
+                                           CreateIntegerASTLeafNode
+                2] correspondingASTNode pushed to astRootsPtrStack 
+            else if (tokenCat == operator || '(' || ')' || ';' )
+                do nothing = ignore operator/'('/')'/';'
+
+            => result:
+                if AST is a binaryTree, 
+                a] first valid(not corresponds to operator/'('/')'/';' token) shift: only one subRoot is in the stack.
+                b] later valid shift = shift after a reduce: 
+                   precious reduce contribute a leftSubRoot to be the bottom of the stack,
+                   current shift contribute a rightSubRoot to be the top of the stack.
+
+        [2] when reduced by rule n(ruleNum):
+
+            ASTNodePtr getParentNode(ruleNum, children)
+            {
+                switch (ruleNum)
+                {
+                    case MULRule:
+                        return CreateMulNode(children)     
+                    case ADDRule:
+                        return CreateMulNode(children) 
+                    case ASSIGN:
+                        return CreateMulNode(children)
+
+                    //case SingleTerminalReduceNonterminal: // node already created when shift. diff from SDT(语法制导翻译) 
+                    //    doNothing 
+
+                    case UnActualActionForCodeGen:
+                        return children[0] // the unique subroot is automatically upgraded to(自动升级为) the root of growing AST.
+                    
+                    case StatementsReducedToProRule: 
+                    {
+                        auto prog = std::make_unique<ProgramAST>();
+                        prog->stmts.push_back(std::move(children[0]));
+                        return prog;
+                    }
+
+                }
+            }
+
+    (4) ParserTreeNodePtrStack: 
         action is shift: 
             Create a Terminal Node using nextSymInInput,
-            Push it to ASTNodePtrStack
+            Push it to ParserTreeNodePtrStack
         action is reduce: build subTree by add  every ParserTreeNodePtr to related Grammar Symbol in right-side to left Grammar Symbol's ParserTreeNodePtr children.
             Create a NonTerminal Node using the left Grammar Symbol of reduction/production, 
             Pop reduction.right.size() ASTNodePtrs as NonTerminal Node's children, 
@@ -492,7 +761,7 @@ global var:
 #ifdef NEEDPARSERTREE 
 ParserTreeNodePtr 
 #else
-void*
+ASTNodePtr
 #endif
 parser(const Token2CatStream& token2CatStream)
 {
@@ -500,6 +769,8 @@ parser(const Token2CatStream& token2CatStream)
     stateIndexStack.push(0);
     
     std::stack<GrammarSym> grammarSymStack;
+
+    std::stack<ASTNodePtr> astRootsPtrStack; 
 
 #ifdef NEEDPARSERTREE 
     std::stack<ParserTreeNodePtr> parserTreeNodeStack;
@@ -535,6 +806,8 @@ parser(const Token2CatStream& token2CatStream)
                 grammarSymStack.push(nextTermSym); // nextSymInInput(getTerminalSym) pushed to stack
                 transDstStateIndex = std::stoi(action.substr(1) ); // move to the dst transition state 
                 stateIndexStack.push(transDstStateIndex); 
+                
+                shiftOpForAST(astRootsPtrStack, nextToken2Cat);
 
 #ifdef NEEDPARSERTREE 
                 ParserTreeNodePtr termNode = std::make_shared<ParserTreeNode>(nextTermSym, nextToken2Cat.first);
@@ -549,6 +822,8 @@ parser(const Token2CatStream& token2CatStream)
                 // 1]
                 int prodIndex = std::stoi(action.substr(1) );
 
+                reduceOpForAST(astRootsPtrStack, prodIndex);
+                      
 #ifdef NEEDPARSERTREE 
                 ParserTreeNodePtr nonTermNode = std::make_shared<ParserTreeNode>(productions[prodIndex].lhs, "");
 #endif
@@ -588,8 +863,10 @@ parser(const Token2CatStream& token2CatStream)
                 {
                     std::cout << "\n Parsing success, AST generated success !!!\n" << std::endl;
 
-#ifdef NEEDPARSERTREE 
+#ifdef NEEDPARSERTREE
                     return parserTreeNodeStack.top();
+#else 
+                    return std::move(astRootsPtrStack.top() ); // Note: stack.pop 返回的 栈顶元素的引用（即使是临时变量）=> 是左值
 #endif 
                 }
             } 
@@ -704,9 +981,41 @@ void printAll(const std::set<GrammarSym>& terms, const std::set<GrammarSym>& non
     }
 }
 
-#ifdef NEEDPARSERTREE
 // 先处理根 + 递归处理每个孩子 => BFS 遍历打印 AST: 
-void printAst(const ParserTreeNodePtr& root, int indent) 
+void printAST(const ASTNodePtr& root, int indent, std::string rootLeftRight) // const ASTNodePtr&: 目的是 只读 root
+{
+    if (!root) 
+        return;
+
+    for (int i = 0; i < indent; ++i) 
+        std::cout << "  ";
+
+    if (ASTNodeCategory::PROG == root->category)
+    {
+        for (const auto& stmt : static_cast<ProgramNode*>(root.get() )->stmts) 
+        {
+            printAST(stmt, indent + 1);
+        }
+    }
+    else if (ASTNodeCategory::BINOP == root->category)
+    {
+        std::cout << rootLeftRight << static_cast<BinaryOpNode*>(root.get() )->op << std::endl;
+        printAST(static_cast<BinaryOpNode*>(root.get() )->left, indent + 1, "lhs:");
+        printAST(static_cast<BinaryOpNode*>(root.get() )->right, indent + 1, "rhs:");
+    }
+    else if (ASTNodeCategory::INTEGER == root->category)
+    {
+        std::cout << rootLeftRight << static_cast<IntegerNode*>(root.get() )->value << std::endl;
+    }
+    else if (ASTNodeCategory::IDENT == root->category)
+    {
+        std::cout << rootLeftRight << static_cast<IdentNode*>(root.get() )->value << std::endl;
+    }
+}
+
+#ifdef NEEDPARSERTREE
+// 先处理根 + 递归处理每个孩子 => BFS 遍历打印 ParseTree: 
+void printParseTree(const ParserTreeNodePtr& root, int indent) 
 {
     if (!root) 
         return;
@@ -723,7 +1032,7 @@ void printAst(const ParserTreeNodePtr& root, int indent)
     
     for (const auto& child : root->children) 
     {
-        printAst(child, indent + 1);
+        printParseTree(child, indent + 1);
     }
 }
 

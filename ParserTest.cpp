@@ -58,12 +58,36 @@ int main()
 
     printAll(terms, nonTerms);
 
-    ParserTreeNodePtr root = parser(token2CatStream);
+    auto root = parser(token2CatStream);
+    std::cout << "root addr: " << root.get() << std::endl;
     if (root) 
     {
-        printAst(root);
+        std::cout << "root not empty: " << std::endl;
+#ifdef NEEDPARSERTREE
+        printParseTree(root);
+#else 
+        std::cout << "==========AST structure:" << std::endl;
+        printAST(root);
+#endif
+
     }
 }
+
+/*
+    g++ Parser.cpp ParserTest.cpp
+*/
+/*
+test2 ok
+
+==========AST structure:
+root:=
+  lhs:x
+  rhs:*
+    lhs:10
+    rhs:+
+      lhs:ab
+      rhs:120
+*/
 
 /*
 g++ Parser.cpp ParserTest.cpp -D NEEDPARSERTREE

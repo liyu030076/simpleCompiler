@@ -30,7 +30,7 @@ int main()
         {TERMINAL, LPARENTHESES},
         {TERMINAL, RPARENTHESES},
         {TERMINAL, SEMICOLON},
-        eof // Note: eof 也
+        eof // Note: eof 
     };
 
     std::set<GrammarSym> nonTerms {
@@ -44,20 +44,19 @@ int main()
 
     printAll(terms, nonTerms);
 
-#ifdef NEEDPARSERTREE
-    ParserTreeNodePtr root = parser(token2CatStream);
+    auto root = parser(token2CatStream);
     if (root) 
     {
-        printAst(root);
-    }
-#else
-    parser(token2CatStream);
+#ifdef NEEDPARSERTREE
+        printParseTree(root);
+#else 
+        std::cout << "==========AST structure:" << std::endl;
+        printAST(root);
 #endif
 
-    //LR1Parser parser;
-    //parser.parse(token2CatStream);
+    }
 }
 
 /*
-    g++ LexicalAnalysize.cpp Parser.cpp main.cpp -D NEEDPARSERTREE
+    g++ LexicalAnalysize.cpp Parser.cpp main.cpp
 */
