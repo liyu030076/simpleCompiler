@@ -7,6 +7,7 @@
 #include <string>
 
 #include "common.h"
+#include "AST.h"
 
 // === 1. interface to Lexical Analyzer
 using Token2Cat = std::pair<std::string, TokenCategory>;
@@ -114,64 +115,8 @@ struct LR1Item
 // ===== LR1Item end
 using State = std::vector<LR1Item>;
 
-// ===== 4. AST
 
-enum class ASTNodeCategory 
-{
-    PROG,      
-    BINOP,          // 二元运算符 * + 
-    // ASSIGNMENTOP,
-    INTEGER,       
-    IDENT              
-};
-
-struct ASTNode 
-{
-    ASTNodeCategory category;
-    ASTNode(ASTNodeCategory cat) : category(cat) {}
-    virtual ~ASTNode() {} // Note: Base must has virtial Dtor, to support std::unique_ptr<Derived> will be implicitly converted to std::unique_ptr<Base>.
-};
-
-using ASTNodePtr = std::unique_ptr<ASTNode>;
-
-struct IdentNode: ASTNode 
-{
-    std::string value;
-    IdentNode(std::string name_) : 
-        ASTNode(ASTNodeCategory::IDENT), value(std::move(name_) ) {}
-};
-
-struct IntegerNode: ASTNode 
-{
-    int value; // Problem：应该用 int 吗？此时，编译器指定 int 是啥吗？
-    IntegerNode(int val) : 
-        ASTNode(ASTNodeCategory::INTEGER), value(val) {}
-};
-
-/*
-struct AssignOpNode: ASTNode // optimize: AssignOpNode 本身就表示了 '=' 节点，但 加一个 表示 op(std::string) 的 field 更便于处理，且便于统一
-{
-    ASTNodePtr left;
-    ASTNodePtr expr;
-    AssignOpNode(ASTNodePtr left_, ASTNodePtr expr_) : 
-        ASTNode(ASTNodeCategory::AssignStmt), left(std::move(left_) ), expr(std::move(expr_) ) {}
-};
-*/
-
-struct BinaryOpNode: ASTNode 
-{
-    ASTNodePtr left, right;
-    std::string op; // "*" / "+" / "=" // Note: "=" 也视为 binaryOp
-    BinaryOpNode(ASTNodePtr left_, ASTNodePtr right_, std::string op_)
-        : ASTNode(ASTNodeCategory::BINOP), left(std::move(left_) ), right(std::move(right_) ), op(std::move(op_) ) {}
-};
-
-struct ProgramNode: ASTNode 
-{
-    std::vector<ASTNodePtr> stmts;
-    ProgramNode() : ASTNode(ASTNodeCategory::PROG) {}
-};
-
+// ===== 4. for generate AST
 enum class PRODUCTIONINDEX
 {
     STATEMENT_REDUCED2_PROG,

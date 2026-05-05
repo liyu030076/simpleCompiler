@@ -8,7 +8,7 @@
 int main()
 {
     // LexicalAnalysis + Parser: test ok
-    std::string input = "x = 10 * (ab + 120);"; // test ok
+    std::string input = "x = 10 * (ab + 120);"; // test1 ok
 
     // ==========1. LexicalAnalysis
     std::vector<std::pair<std::string, TokenCategory> > token2CatStream;
@@ -69,5 +69,23 @@ int main()
 }
 
 /*
-    g++ LexicalAnalysize.cpp Parser.cpp IRGen.cpp main.cpp
+    g++ LexicalAnalysize.cpp Parser.cpp IRGen.cpp IRGenTest.cpp
+*/
+
+/*
+test1 ok
+    ==========AST structure:
+    root:=
+    lhs:x
+    rhs:*
+        lhs:10
+        rhs:+
+        lhs:ab
+        rhs:120
+    ==========IR Code list:
+    t1 = 10
+    t2 = 120
+    t3 = ab + t2
+    t4 = t1 * t3
+    x = t4
 */

@@ -461,6 +461,12 @@ ASTNodePtr CreateBinaryOpNode(std::vector<ASTNodePtr>& children, const std::stri
     // return std::make_unique<BinaryOpNode>(std::move(children[0]), std::move(children[1]), op);
 }
 
+ASTNodePtr CreateAssignmentNode(std::vector<ASTNodePtr>& children)
+{
+    ASTNodePtr parent = std::make_unique<AssignOpNode>(std::move(children[0]), std::move(children[1]) );
+    return parent;
+}
+
 /*
     设计方案：
         在 有效 shift((not corresponds to operator/'('/')'/';' token)) 时，创建 ASTLeafNode;
@@ -537,9 +543,9 @@ ASTNodePtr getParentNode(int prodIndex, std::vector<ASTNodePtr>& children)
             break;
             //return CreateBinaryOpNode(children, "+");
         case PRODUCTIONINDEX::ASSIGN:
-            parent = CreateBinaryOpNode(children, "=");
+            parent = CreateAssignmentNode(children); //return CreateBinaryOpNode(children, "=");  
             break;
-            //return CreateBinaryOpNode(children, "=");  
+
         case PRODUCTIONINDEX::STATEMENT_REDUCED2_PROG: 
         {
             auto prog = std::make_unique<ProgramNode>();
@@ -1002,6 +1008,12 @@ void printAST(const ASTNodePtr& root, int indent, std::string rootLeftRight) // 
         std::cout << rootLeftRight << static_cast<BinaryOpNode*>(root.get() )->op << std::endl;
         printAST(static_cast<BinaryOpNode*>(root.get() )->left, indent + 1, "lhs:");
         printAST(static_cast<BinaryOpNode*>(root.get() )->right, indent + 1, "rhs:");
+    }
+    else if (ASTNodeCategory::ASSIGNMENT == root->category)
+    {
+        std::cout << rootLeftRight << "=" << std::endl;
+        printAST(static_cast<AssignOpNode*>(root.get() )->left, indent + 1, "lhs:");
+        printAST(static_cast<AssignOpNode*>(root.get() )->right, indent + 1, "rhs:");
     }
     else if (ASTNodeCategory::INTEGER == root->category)
     {
