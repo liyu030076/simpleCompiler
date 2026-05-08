@@ -14,6 +14,7 @@ int main()
     }; // 10 * 15
     */
     
+    /*
     // test2 ok
     Token2CatStream token2CatStream =
     {
@@ -28,9 +29,35 @@ int main()
         {")", RPARENTHESES},
         {";", SEMICOLON},
     }; // x = 10 * (ab + 120);
-    
+    */
+
+    /*
+    test3 ok
+    Token2CatStream token2CatStream =
+    {
+        {"ab", IDENTIFIER},
+        {"=", ASSIGN},
+        {"2", INTEGER},
+        {";", SEMICOLON},
+    }; // "ab = 2; b = ab;"
+    */
+
+    //test4 ok
+    Token2CatStream token2CatStream =
+    {
+        {"ab", IDENTIFIER},
+        {"=", ASSIGN},
+        {"2", INTEGER},
+        {";", SEMICOLON},
+        {"b", IDENTIFIER},
+        {"=", ASSIGN},
+        {"ab", IDENTIFIER},
+        {";", SEMICOLON},
+    }; // "ab = 2; b = ab;"
 
     initGrammar();
+    nonTermDeriveEpsilonCalc();
+    computeFirstSet();
     buildStatesAndStateTransGraph();
     buildActTblAndGotoTbl();
     
@@ -44,11 +71,12 @@ int main()
         {TERMINAL, LPARENTHESES},
         {TERMINAL, RPARENTHESES},
         {TERMINAL, SEMICOLON},
-        eof // Note: eof 也
+        eof // Note: eof
     };
 
     std::set<GrammarSym> nonTerms {
         {NON_TERMINAL, Pro},  
+        {NON_TERMINAL, StatementList},  
         {NON_TERMINAL, Statement},  
         {NON_TERMINAL, ASSIG},      
         {NON_TERMINAL, Expr},       
@@ -76,6 +104,20 @@ int main()
 /*
     g++ Parser.cpp ParserTest.cpp
 */
+
+/*
+test4 ok
+==========AST structure:
+==========AST structure:
+prog: 
+  subroot:=
+    lhs:ab
+    rhs:2
+  subroot:=
+    lhs:b
+    rhs:ab
+*/
+
 /*
 test2 ok
 

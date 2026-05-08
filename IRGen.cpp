@@ -2,7 +2,6 @@
     All CodeGens, whether (actual) CodeGen or IR CodeGen, if directly use AST as input, will have the same implement idea.
 */
 
-
 /*
 ==========1. global var
     using IRInstr = std::string;
@@ -32,7 +31,7 @@ Emit(op, src1, src2, dst)   // directly use AST as input to generate IR Code
     else if Op is load variable, Emit will know src1  is the base(rarp), src2 is the offset(@a), dst is the register。
 
     switch Op:
-        case "LoadIntegtr":
+        case "LoadInteger":
             irCodeList.push_back(dst + " = " + src1)
         case "+":
         case "*"
@@ -55,7 +54,7 @@ string genIR(ASTNode node)
 
         case ASTNodeCategory::INTEGER:
             t = newTempVar()
-            emit("LoadIntegtr", to_string(node.value), "", t)
+            emit("LoadInteger", to_string(node.value), "", t)
             return t
 
         case ASTNodeCategory::IDENT:
@@ -110,12 +109,12 @@ std::string IRGen::newTempVar()
 
 void IRGen::emit(std::string op, std::string src1, std::string src2, std::string dst)   // directly use AST as input to generate IR Code
 {   
-    if ("LoadIntegtr" == op)
+    if ("LoadInteger" == op)
     {
         irCodeList.push_back(dst + " = " + src1);
     }   
     else if ("+" == op ||
-                "*" == op)
+             "*" == op)
     {
         irCodeList.push_back(dst + " = " + src1 + " " + op + " " + src2);
     }
@@ -148,7 +147,7 @@ std::string IRGen::genIR(ASTNodePtr node)
         case ASTNodeCategory::INTEGER:
         {
             t = newTempVar();
-            emit("LoadIntegtr", std::to_string(static_cast<IntegerNode*>(node.get() )->value), "", t);
+            emit("LoadInteger", std::to_string(static_cast<IntegerNode*>(node.get() )->value), "", t);
             break;
             //return t;
         }
@@ -174,7 +173,26 @@ std::string IRGen::genIR(ASTNodePtr node)
             std::string rOprand = genIR(std::move(static_cast<AssignOpNode*>(node.get() )->right) ); // recursively generate right subTree IR
             emit("=", static_cast<IdentNode*>(static_cast<AssignOpNode*>(node.get() )->left.get() )->value, rOprand, ""); // generate current operator IR
             break;
-            //return ""; // Note: for "=", don't generate new temp variable for left of assignment, that don't generate left operand.
+            // Note: for "=", don't generate new temp variable for left of assignment, that don't generate left operand.
+            //return ""; 
+        }
+        case ASTNodeCategory::PROG:
+        {
+            /*
+            std::vector<std::unique_ptr<Base> > 的正确遍历：
+                [1] 只读 容器内的 up 元素
+                    for (const std::unique_ptr<Base>& up : vec) 
+                        // 用 up-> 访问成员的引用。ptr 是引用，没有拷贝，安全
+                [2] 想修改（如 重置、move）容器内的 up 元素
+                    for (std::unique_ptr<Base>& up : vec)
+                        // up.reset();
+            */
+            for(ASTNodePtr& subRoot: static_cast<ProgramNode*>(node.get() )->stmts)
+            {
+                // Note: after this move, the up left in root/prog.stmts are all empty(== nullptr)
+                genIR(std::move(subRoot) ); // doesn't care return value 
+            } 
+            break;
         }
         default:
         {
@@ -185,7 +203,7 @@ std::string IRGen::genIR(ASTNodePtr node)
     return t; // NRVO
 }
 
-const std::vector<IRGen::IRInstr>& IRGen::getIRCodeList() const
+const std::vector<IRInstr>& IRGen::getIRCodeList() const
 {
     return irCodeList;
 }

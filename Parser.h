@@ -1,11 +1,7 @@
 #ifndef PARSER_H
 #define PARSER_H
 
-#include <vector>
 #include <set>
-#include <memory>
-#include <string>
-
 #include "common.h"
 #include "AST.h"
 
@@ -18,17 +14,20 @@ using Token2CatStream = std::vector<Token2Cat>;
 enum GrammarSymCat 
 {
     TERMINAL,
-    NON_TERMINAL
+    NON_TERMINAL,
+    //EPSILON // Note: epsilon is not terminal, and is also not non-terminal
 };
 
 enum NonTerminalId 
 {
     Pro = 0,  // Program
-    Statement = 1,  // Statement
-    ASSIG = 2,      
-    Expr = 3,       
-    Term = 4,       
-    Factor = 5
+    StatementList,
+    Statement, // Statement
+    //Epsilon,
+    ASSIG,     
+    Expr,      
+    Term,    
+    Factor
 };
 
 extern std::vector<std::pair<NonTerminalId, const char*> > nonTerminalId2Str;
@@ -64,6 +63,13 @@ inline GrammarSym getNonTerminalSym(NonTerminalId nonTerminalId)
 {
     return {NON_TERMINAL, static_cast<int>(nonTerminalId) };
 }
+
+/*
+inline GrammarSym getEpsilonSym(NonTerminalId nonTerminalId) 
+{
+    return {EPSILON, static_cast<int>(nonTerminalId) };
+}
+*/
 
 struct Production 
 {
@@ -119,7 +125,10 @@ using State = std::vector<LR1Item>;
 // ===== 4. for generate AST
 enum class PRODUCTIONINDEX
 {
-    STATEMENT_REDUCED2_PROG,
+    STATEMENTLIST_REDUCED2_PROG,
+    STATEMENTLIST_STATEMENT_REDUCED2_STATEMENTLIST,
+    EPSILON_REDUCED2_STATEMENTLIST,
+    //STATEMENT_REDUCED2_PROG,
     ASSIGN_REDUCED2_STATEMENT,
     ASSIGN,
     ADD,
@@ -156,7 +165,8 @@ using ParserTreeNodePtr = std::shared_ptr<ParserTreeNode>;
 // ===== ParserTree end
 
 void initGrammar();
-
+void nonTermDeriveEpsilonCalc();
+void computeFirstSet();
 void buildStatesAndStateTransGraph();
 void buildActTblAndGotoTbl();
 
@@ -166,6 +176,8 @@ ParserTreeNodePtr
 ASTNodePtr
 #endif
 parser(const Token2CatStream& token2CatStream);
+
+void printItem(const LR1Item& item);
 
 void printAll(const std::set<GrammarSym>& terms, const std::set<GrammarSym>& nonTerms);
 

@@ -4,10 +4,16 @@
 #include <queue>
 #include <algorithm>
 #include <iomanip>
+#include <unordered_map>
 
 #include "Parser.h"
 
 std::vector<Production> productions;
+
+std::unordered_map<NonTerminalId, bool> nonTerm2CanDeriveEpsilon;
+
+/* key: NonTerminalId, value: TerminalId 的集合 */
+std::map<NonTerminalId, std::set<TokenCategory> > firstSet; // Note: not include epsilon
 
 std::vector<State> states; // state vector/array: store states in sequence, used when lookup GotoTable and ActionTable 
 
@@ -18,7 +24,8 @@ std::map<int, std::map<GrammarSym, int> > gotoTable;
 std::vector<std::pair<NonTerminalId, const char*> > nonTerminalId2Str
 {
     {Pro, "Pro"},
-    {Statement, "Statement"},
+    {StatementList, "Stmts"},
+    {Statement, "Stmt"},
     {ASSIG, "ASSIG"},
     {Expr, "Expr"},
     {Term, "Term"},
@@ -28,8 +35,8 @@ std::vector<std::pair<NonTerminalId, const char*> > nonTerminalId2Str
 std::vector<std::pair<TokenCategory, const char*> > terminalId2Str
 {
     {IF, "if"},
-    {IDENTIFIER, "identifier"},
-    {INTEGER, "integer"},
+    {IDENTIFIER, "ident"},
+    {INTEGER, "integ"},
     {ASSIGN, "="},
     {MUL, "*"},
     {ADD, "+"},
@@ -43,6 +50,12 @@ std::vector<std::pair<TokenCategory, const char*> > terminalId2Str
 /*
     better design: 令 productions 的 startSym 唯一 => start production index = 0
 
+    Note: why rule4 need SEMICOLON, whlie other rules don't need SEMICOLON?
+        [1] 需要分号（;）的：能独立成为一行代码、独立执行的 
+            语句（Statement）
+        [2] 不需要分号的：只是语句的一部分、不能单独执行的 
+            表达式 / 项 / 因子（Expr / Term / Factor）
+
 global var:
     productions
 */
@@ -50,19 +63,139 @@ void initGrammar()
 {
     productions = 
     {
-        {getNonTerminalSym(Pro), {getNonTerminalSym(Statement)} },                                                                              // Program → Statement
+        {getNonTerminalSym(Pro), {getNonTerminalSym(StatementList)} },                                                                          // Program → StatementList                  rule0
+        {getNonTerminalSym(StatementList), {getNonTerminalSym(StatementList), getNonTerminalSym(Statement)} },                                  // StatementList → StatementList Statement  rule1 // 以支持 多条语句
+        {getNonTerminalSym(StatementList), { /* getEpsilonSym(Epsilon) */ } },                                                                  // StatementList → epsilon                  rule2 // 以支持 多条语句
         // {getNonTerminalSym(Statement), {getTerminalSym(IF), getTerminalSym(LPARENTHESES), getNonTerminalSym(Expr), getTerminalSym(RPARENTHESES), getNonTerminalSym(Statement)} },  // S → if(E)S  // hasn't support if statement
-        {getNonTerminalSym(Statement), {getNonTerminalSym(ASSIG)} },                                                                            // Statement → ASSIG
-        {getNonTerminalSym(ASSIG), {getTerminalSym(IDENTIFIER), getTerminalSym(ASSIGN), getNonTerminalSym(Expr), getTerminalSym(SEMICOLON)} },  // ASSIG → identifier = Expr;   
-        {getNonTerminalSym(Expr), {getNonTerminalSym(Expr), getTerminalSym(ADD), getNonTerminalSym(Term)} },                                    // Expr → Expr + Term           rule3
-        {getNonTerminalSym(Expr), {getNonTerminalSym(Term)} },                                                                                  // Expr → Term                  rule4
-        {getNonTerminalSym(Term), {getNonTerminalSym(Term), getTerminalSym(MUL), getNonTerminalSym(Factor)} },                                  // Term → Term * Factor         rule5
-        {getNonTerminalSym(Term), {getNonTerminalSym(Factor)} },                                                                                // Term → Factor                rule6
-        {getNonTerminalSym(Factor), {getTerminalSym(INTEGER)} },                                                                                // Factor → integer             rule7
-        {getNonTerminalSym(Factor), {getTerminalSym(IDENTIFIER)} },                                                                             // Factor → identifier          rule8
-        {getNonTerminalSym(Factor), {getTerminalSym(LPARENTHESES), getNonTerminalSym(Expr), getTerminalSym(RPARENTHESES)} }                     // Factor → (Expr)              rule9
+        {getNonTerminalSym(Statement), {getNonTerminalSym(ASSIG)} },                                                                            // Statement → ASSIG            rule3
+        {getNonTerminalSym(ASSIG), {getTerminalSym(IDENTIFIER), getTerminalSym(ASSIGN), getNonTerminalSym(Expr), getTerminalSym(SEMICOLON)} },  // ASSIG → identifier = Expr;   rule4
+        {getNonTerminalSym(Expr), {getNonTerminalSym(Expr), getTerminalSym(ADD), getNonTerminalSym(Term)} },                                    // Expr → Expr + Term           rule5
+        {getNonTerminalSym(Expr), {getNonTerminalSym(Term)} },                                                                                  // Expr → Term                  rule6
+        {getNonTerminalSym(Term), {getNonTerminalSym(Term), getTerminalSym(MUL), getNonTerminalSym(Factor)} },                                  // Term → Term * Factor         rule7
+        {getNonTerminalSym(Term), {getNonTerminalSym(Factor)} },                                                                                // Term → Factor                rule8
+        {getNonTerminalSym(Factor), {getTerminalSym(INTEGER)} },                                                                                // Factor → integer             rule9
+        {getNonTerminalSym(Factor), {getTerminalSym(IDENTIFIER)} },                                                                             // Factor → identifier          rule10
+        {getNonTerminalSym(Factor), {getTerminalSym(LPARENTHESES), getNonTerminalSym(Expr), getTerminalSym(RPARENTHESES)} }                     // Factor → (Expr)              rule11
     };
 }
+
+void nonTermDeriveEpsilonCalc() 
+{
+    bool updated = true;
+    while (updated) 
+    {
+        updated = false;
+        for (const auto& prod : productions) 
+        {
+            NonTerminalId lhs = static_cast<NonTerminalId>(prod.lhs.termTokenCat_nonTermId);
+
+            // Note: for map m, if someKey not in m, m[someKey] will use {key, valueDefault: bool det=faultValue = false} to insert into m.
+            if (nonTerm2CanDeriveEpsilon[lhs])  
+                continue;
+
+            // case1: production rhs is epsilon directly.
+            if (prod.rhs.empty() ) 
+            {
+                nonTerm2CanDeriveEpsilon[lhs] = true;
+                updated = true;
+                continue;
+            }
+
+            // case2: production rhs all syms can derive epsilon => lhs can derive epsilon
+            bool allCanDeriveEpsilon = true;
+            for (const auto& sym : prod.rhs) 
+            {
+                if (sym.grammarSymCat == GrammarSymCat::TERMINAL) 
+                {
+                    allCanDeriveEpsilon = false;
+                    break;
+                }
+
+                NonTerminalId nonTermId = static_cast<NonTerminalId>(sym.termTokenCat_nonTermId);
+                if (!nonTerm2CanDeriveEpsilon[nonTermId]) 
+                {
+                    allCanDeriveEpsilon = false;
+                    break;
+                }
+            }
+            if (allCanDeriveEpsilon) 
+            {
+                nonTerm2CanDeriveEpsilon[lhs] = true;
+                updated = true;
+            }
+        }
+    }
+}
+
+void computeFirstSet() 
+{
+    bool updated = true;
+
+    while (updated) 
+    {
+        /*
+            Traverse all productions in multiple rounds(多轮). 
+            Once there isn't an NonTerminal whose first set is updated after a round of traversal, the computation of First sets is complete.
+        */
+        updated = false; 
+        
+        for (const auto& prod : productions)
+        {
+            NonTerminalId lhsNonTermId = static_cast<NonTerminalId>(prod.lhs.termTokenCat_nonTermId);
+
+            /*
+                Note: first not include epsilon, because first set will used to calculate ActionTable, 
+                    while ActionTable col doesn't include epsilon.
+                    so, there is no need to include epsilon into first set.
+            */
+            if (prod.rhs.empty() ) // -> epsilon
+            {
+                continue;
+            }
+
+            /*
+            Traverse all syms on the right, process Nullable Chaining Derivation.
+                if sym is Terminal, directly added to first set 
+                else // if sym is NonTerminal, 
+                    [1] transfer it's first set. 
+                    [2] if the current NonTerminal can't derive epsilon, terminate traverse; 
+                        else, continue traverse the next sym.
+            */
+            for (const auto& sym : prod.rhs) 
+            {
+                if (GrammarSymCat::TERMINAL == sym.grammarSymCat)
+                {
+                    TokenCategory rhsFirstTermCat = static_cast<TokenCategory>(sym.termTokenCat_nonTermId);
+
+                    if (!firstSet[lhsNonTermId].count(rhsFirstTermCat) ) 
+                    {
+                        firstSet[lhsNonTermId].insert(rhsFirstTermCat);
+                        updated = true;
+                    }
+                } 
+                else 
+                {
+                    NonTerminalId rhsFirstNonTermId = static_cast<NonTerminalId>(sym.termTokenCat_nonTermId);
+                    for (const auto& rhsFirstTermCat: firstSet[rhsFirstNonTermId]) 
+                    {
+                        if (!firstSet[lhsNonTermId].count(rhsFirstTermCat) ) 
+                        {
+                            firstSet[lhsNonTermId].insert(rhsFirstTermCat);
+                            updated = true;
+                        }
+                    }
+
+                    // !!! keyPonit: If the current NonTerminal can't derive epsilon, terminate traverse; else, continue traverse the next sym.
+                    if (!nonTerm2CanDeriveEpsilon[rhsFirstNonTermId])
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 bool isItemExistInState(const LR1Item& item, const State& state)
 {
@@ -81,12 +214,15 @@ bool isItemExistInState(const LR1Item& item, const State& state)
 /*
 ===================== state closure
 design scheme:
-    1] 一条 LR1Item 的 lookahead 只有当 dotPos 之后第 2 个 Sym 为 Terminal 或 dotPos 到达末尾(dot 之后为 空) 时才有意义，
-        当 dotPos 之后第 2 个 Sym 为 NonTerminal 时没用。
-            curItem 中 . 已经到达末尾 =>  闭包产生的 newItem 的 前瞻符号(lookahead) 用 当前 curItem.lookahead
-            curItem 中 . 未到达末尾   =>  闭包产生的 newItem 的 前瞻符号(lookahead) 用 dotNextGramSym_FollowGramSym
+    [1] lookaheadSet(前瞻符号集合)
+        curItem 中 . 已经到达末尾 => 闭包产生的 newItem 的 lookaheadSet 加入 curItem.lookahead
+        curItem 中 . 未到达末尾   => 闭包产生的 newItem 的 lookaheadSet 逐个加入 dotNextSym 之后 每个 
+            Terminal sym itself or fistSet of NomTerminal who can derive epsilon, 
+            until meet the first Terminal or the first NomTerminal who can't derive epsilon.
 
-    2] dotNextGramSym_FollowGramSym_FirstSet -> 新发现的 item 的 item.lookahead -> 最终在 fillActionTable 中作为 actionTable 的 colIndex 
+    [2] lookaheadSet/dotNextGramSym_FollowGramSym_FirstSet 
+        -> 新发现的 item 的 item.lookahead 
+        -> 最终在 fillActionTable 中作为 actionTable 的 colIndex 
 */
 void closure(State& state) // STL container (std::vecror): 不需要 独立副本（容器已存在）时，用 引用传递 -> 且 想修改 容器 => 用 non-const 引用
 {
@@ -102,36 +238,57 @@ void closure(State& state) // STL container (std::vecror): 不需要 独立副�
         LR1Item curItem = itemQue.front();
         itemQue.pop();
 
-        // [2.2] get curItemDotNextGramSym
-        GrammarSym curItemDotNextGramSym = productions[curItem.prodIndex].rhs[curItem.dotPos];
-
-        // [2.3] closure doesn't generate new item for the item whose dot(placeholder) has reached the end, 
-        //                                                   or whose curItemDotNextGramSym is TerminalSym. 
-        int curItemRhsSymNum = productions[curItem.prodIndex].rhs.size();
-
-        if (curItem.dotPos >= curItemRhsSymNum || 
-            TERMINAL == curItemDotNextGramSym.grammarSymCat) 
+        // [2.2] closure doesn't generate new item for the item whose dot(placeholder) has reached the end(include item that directly derive epsilon), 
+        //                                                   or whose curItemDotNextGramSym is TerminalSym.
+        // Note: For item that directly derive epsilon <=> [someNonTerminal -> .epsilon, lookahead], dot has actually reached the end.
+        const Production& curProd = productions[curItem.prodIndex];
+        if (curItem.dotPos >= curProd.rhs.size() )
             continue;
 
-        // [2.4] calculate lookahead/dotNextGramSym_FollowGramSym_FirstSet for items generated by closure(curItem) 
-        GrammarSym dotNextGramSym_FollowGramSym_FirstSet;
-        
-        if (curItem.dotPos < curItemRhsSymNum - 1) // optimize: this branch may has high hit ratio // curItem.dotPos hasn't reached the previous position of the end of the right-hand side
+        // Note: the previous if condition doesn't satisfied => curItemDotNextGramSym be bound to be Nonterminal
+        GrammarSym curItemDotNextGramSym = curProd.rhs[curItem.dotPos]; 
+        if (TERMINAL == curItemDotNextGramSym.grammarSymCat)
+            continue;
+
+        // [2.3] calculate lookaheads/dotNextGramSym_FollowGramSym_FirstSet for items generated by closure(curItem) 
+        std::set<GrammarSym> lookaheadSet;
+        bool traverseSymCanDeriveEpsilon = true;
+        // Note: 1] the lookaheads contributed by the grammar symbol following the curItemDotNextGramSym
+        for (int symIdx = curItem.dotPos + 1; symIdx < curProd.rhs.size() && traverseSymCanDeriveEpsilon; ++symIdx)  
         {
-            GrammarSym cutItemDotNextGramSym_FollowGramSym = productions[curItem.prodIndex].rhs[curItem.dotPos + 1]; // A -> .Aa, eof => cutItemDotNextGramSym_FollowGramSym = a
-            if (TERMINAL == cutItemDotNextGramSym_FollowGramSym.grammarSymCat)
-                dotNextGramSym_FollowGramSym_FirstSet = cutItemDotNextGramSym_FollowGramSym;
-            // else if (NON_TERMINAL == cutItemDotNextGramSym_FollowGramSym.grammarSymCat)
-                // dotNextGramSym_FollowGramSym_FirstSet is useless when cutItemDotNextGramSym_FollowGramSym is an NonTerminal
+            GrammarSym sym = curProd.rhs[symIdx];
+            traverseSymCanDeriveEpsilon = false;
+
+            if (TERMINAL == sym.grammarSymCat)
+            {
+                lookaheadSet.insert(sym);
+            }
+            else 
+            {
+                NonTerminalId nonTermId = static_cast<NonTerminalId>(sym.termTokenCat_nonTermId);
+                for (const auto& firstTerm: firstSet[nonTermId])
+                {
+                    lookaheadSet.insert(getTerminalSym(firstTerm) );
+                }
+
+                traverseSymCanDeriveEpsilon = nonTerm2CanDeriveEpsilon[nonTermId];
+            }  
         }
-        else // if (curItem.dotPos == curItemRhsSymNum - 1) // curItem.dotPos reach the previous position of the end of the right-hand side
+        /*
+        Note: 2] the lookaheads contributed by the current item.
+            All the Grammar symbols (maybe empty string) following curItemDotNextGramSym can derive epsilon.
+                <=> dot has reached the end of the curItem.rhs.
+                <=> for loop enter(not empty symbols string, but all syms following curItemDotNextGramSym can derive epsilon) 
+                    or for loop doesn't enter(empty symbols string)
+        */
+        if (traverseSymCanDeriveEpsilon) 
         {
-            dotNextGramSym_FollowGramSym_FirstSet = curItem.lookahead;
+            lookaheadSet.insert(curItem.lookahead);
         }
-            
+
         /* 
-            [2.5] for every production that define the curItemDotNextGramSym, 
-                1] create a item with dotPos is 0, and lookahead is dotNextGramSym_FollowGramSym_FirstSet
+            [2.4] for every production that define the curItemDotNextGramSym, 
+                1] for every lookahead in lookaheadSet/dotNextGramSym_FollowGramSym_FirstSet, create a item with dotPos is 0
                 
                 2] check if it's not exist in the current state, 
                     add the new item to the current state to complement(补全) the state and 
@@ -139,19 +296,29 @@ void closure(State& state) // STL container (std::vecror): 不需要 独立副�
         */
         for (int prodIndex = 0; prodIndex < productions.size(); prodIndex++)   
         {
-            if (productions[prodIndex].lhs == curItemDotNextGramSym)  
+            if (productions[prodIndex].lhs == curItemDotNextGramSym) // Note: curItemDotNextGramSym be bound to be Nonterminal
             {
-                LR1Item item;
-                item.prodIndex = prodIndex;
-                item.dotPos = 0;
-                item.lookahead = dotNextGramSym_FollowGramSym_FirstSet;    // A -> .Aa, eof => item.lookahead = cutItemDotNextGramSym_FollowGramSym = a
-
-                bool existInState = isItemExistInState(item, state);
-                if (!existInState) 
+                for (const auto& dotNextFirstTerm: lookaheadSet)
                 {
-                    state.push_back(item); // modify state to become larger // 对 所有定义 curItemDotNextGramSym(A) 的 production:  A -> Aa / A -> a, 生成新 item: A -> .Aa, a / A -> .a, a
-                    itemQue.push(item);
+                    LR1Item itemDefDotNextNonTerm;
+                    itemDefDotNextNonTerm.prodIndex = prodIndex;
+                    itemDefDotNextNonTerm.dotPos = 0;
+                    itemDefDotNextNonTerm.lookahead = dotNextFirstTerm; 
+                    
+                    if (!isItemExistInState(itemDefDotNextNonTerm, state)) 
+                    {
+                        state.push_back(itemDefDotNextNonTerm); // modify state to become larger // 对 所有定义 curItemDotNextGramSym(A) 的 production:  A -> Aa / A -> a, 生成新 item: A -> .Aa, a / A -> .a, a
+                        itemQue.push(itemDefDotNextNonTerm);
+                        
+                        std::cout << "\ncase1: add new item because of recursely traverse curItemDotNextGramSym!\n";
+                        /*
+                        std::cout << "item grammarSymCat: TERMINAL/NON_TERMINAL-0/1, enum TokenCategory / enum NonTerminalId: " << 
+                            itemDefDotNextNonTerm.lookahead.grammarSymCat << ", " << itemDefDotNextNonTerm.lookahead.termTokenCat_nonTermId << "\n";
+                        printItem(itemDefDotNextNonTerm);
+                        */
+                    }
                 }
+                
             }
         }
     }
@@ -178,10 +345,17 @@ State buildTransDstState(const State& curState, GrammarSym grammarSym) // STL co
         if (grammarSym == productions[item.prodIndex].rhs[item.dotPos]) 
         {
             // Note: move dot to next position to generate a new item
-            LR1Item newItem = item; // Note: C++ struct 赋值 默认为 逐成员赋值
-            newItem.dotPos++; 
+            LR1Item transDstItemGivenGramSym = item; // Note: C++ struct 赋值 默认为 逐成员赋值
+            transDstItemGivenGramSym.dotPos++; 
 
-            transDstState.push_back(newItem);
+            transDstState.push_back(transDstItemGivenGramSym);
+            
+            std::cout << "\ncase2: add new item because of state transition! lookahead unchanged, dotMoveback\n";
+            /*
+            std::cout << "item grammarSymCat: TERMINAL/NON_TERMINAL-0/1, enum TokenCategory / enum NonTerminalId: " << 
+                transDstItemGivenGramSym.lookahead.grammarSymCat << ", " << transDstItemGivenGramSym.lookahead.termTokenCat_nonTermId << "\n";
+            printItem(transDstItemGivenGramSym);
+            */
         }
     }
 
@@ -225,7 +399,11 @@ void buildStatesAndStateTransGraph()
     uniqueStartItem.prodIndex = 0; // point to the start production whose production index = 0 (productions already designed as has unique startSym)
     uniqueStartItem.dotPos = 0; 
     uniqueStartItem.lookahead = eof;
-
+    /*
+    std::cout << "item grammarSymCat: TERMINAL/NON_TERMINAL-0/1, enum TokenCategory / enum NonTerminalId: " << 
+        uniqueStartItem.lookahead.grammarSymCat << ", " << uniqueStartItem.lookahead.termTokenCat_nonTermId << "\n";
+    printItem(uniqueStartItem);
+    */
     // [1] calc startState by closure(startState init. value with single uniqueStartItem)
     State startState;
     startState.push_back(uniqueStartItem);
@@ -252,7 +430,7 @@ void buildStatesAndStateTransGraph()
         }
 
         /* 
-            [3.3] for current state and every vaild dotNextGramarSym in the current state, 
+            [3.3] for current state and every vaild dotNextSym in the current state, 
                 1] build the dst transition state(by closure),
                     When the same state is constructed multiple times, their items are identical in order/sequence.
                     => Comparing two states only requires comparing each item in sequence.
@@ -263,9 +441,9 @@ void buildStatesAndStateTransGraph()
                     Push transDstState index to stateIndexQue.
                 4] link current state (index) to transDstState.
         */
-        for (GrammarSym dotNextGramarSym: curStateDotNextGrammarSyms)
+        for (GrammarSym dotNextSym: curStateDotNextGrammarSyms)
         {
-            State transDstState = buildTransDstState(states[curStateIndex], dotNextGramarSym);
+            State transDstState = buildTransDstState(states[curStateIndex], dotNextSym);
             if (transDstState.empty() ) 
                 continue;
             
@@ -279,7 +457,7 @@ void buildStatesAndStateTransGraph()
                 stateIndexQue.push(matchedStateIndex);
             }
 
-            stateTransGraph[{curStateIndex, dotNextGramarSym}] = matchedStateIndex;
+            stateTransGraph[{curStateIndex, dotNextSym}] = matchedStateIndex;
         }
     }
 }
@@ -314,11 +492,11 @@ global var:
     Action 表的列 = 下一个输入符号（只能是终结符 / EOF）
     Action 表的行 = 当前状态
 
-    [1] ActionTable 的 shift 部分 (+ GotoTable) 由 stateTransGraph + state 中 placeholder 未到达末尾的 items + dotNextGramarSym 可得到 要转移到的 状态 (index) 确定
+    [1] ActionTable 的 shift 部分 (+ GotoTable) 由 stateTransGraph + state 中 placeholder 未到达末尾的 items + dotNextSym 可得到 要转移到的 状态 (index) 确定
 
     [2] ActionTable 的 reduce 和 acc 部分 由 state + stateIndex + state 中 placeholder 到达末尾的 items 的 lookahead +要归约的 production index 确定 
 
-    为什么 shift 时，actionTable[stateIndex][dotNextGramarSym] 却要用 dotNextGramarSym = productions[item.prodIndex].rhs[item.dotPos];
+    为什么 shift 时，actionTable[stateIndex][dotNextSym] 却要用 dotNextSym = productions[item.prodIndex].rhs[item.dotPos];
         而 reduce 或 Accept 时 actionTable[stateIndex][lookahead] 中的 lookahead 是取 item.lookahead。
 
     答: Shift 动作的触发条件 = 点・后面紧跟一个终结符，点・后面还可以 再读 终结符。
@@ -328,27 +506,34 @@ void fillActionTable(int stateIndex, const State& state)
 {
     for (const auto& item : state) 
     {
-        if (item.dotPos < productions[item.prodIndex].rhs.size() ) // shift
+        const Production& prod = productions[item.prodIndex];
+
+        if (prod.rhs.empty() ) // <=> (0 == prod.rhs.size() ) // Note: reduction for item that derive epsilon.
         {
-            GrammarSym dotNextGramarSym = productions[item.prodIndex].rhs[item.dotPos];
-            if (TERMINAL == dotNextGramarSym.grammarSymCat && stateTransGraph.count({stateIndex, dotNextGramarSym}) ) 
-            {
-                int transDstStateIndex = stateTransGraph[{stateIndex, dotNextGramarSym}];
-                actionTable[stateIndex][dotNextGramarSym] = "s" + std::to_string(transDstStateIndex);
-            }
-            // else if (NON_TERMINAL == dotNextGramarSym.grammarSymCat) 
-                // doNothing // actionTable[stateIndex][dotNextGramarSym] is empty, because NonTerminal is invaild col in ActionTable
+            //if (GrammarSymCat::TERMINAL == item.lookahead) // Note: the lookahead of every item in a state is terminal
+                actionTable[stateIndex][item.lookahead] = "r" + std::to_string(item.prodIndex);
         }
-        else if (item.dotPos == productions[item.prodIndex].rhs.size() ) 
+        else if (item.dotPos < prod.rhs.size() ) // shift
         {
-            if (productions[item.prodIndex].lhs == productions[0].lhs) // accepted ==== Check
+            GrammarSym dotNextSym = prod.rhs[item.dotPos];
+            if (GrammarSymCat::TERMINAL == dotNextSym.grammarSymCat && stateTransGraph.count({stateIndex, dotNextSym}) ) 
             {
-                if (TERMINAL == item.lookahead.grammarSymCat) // ======optimize: only getTerminalSym and eof (viewed as getTerminalSym) is vaild col in ActionTable
-                    actionTable[stateIndex][item.lookahead] = "acc";
+                int transDstStateIndex = stateTransGraph[{stateIndex, dotNextSym}];
+                actionTable[stateIndex][dotNextSym] = "s" + std::to_string(transDstStateIndex);
+            }
+            // else if (NON_TERMINAL == dotNextSym.grammarSymCat) // Note: ActionTable cols doesn't include NonTerminal
+                // doNothing
+        }
+        else if (item.dotPos == prod.rhs.size() ) 
+        {
+            if (prod.lhs == productions[0].lhs) // accepted 
+            {
+                //if (TERMINAL == item.lookahead.grammarSymCat) // ======optimize: only getTerminalSym and eof (viewed as getTerminalSym) is vaild col in ActionTable
+                    actionTable[stateIndex][item.lookahead] = "acc"; // actually, the accept is the ruduce by rule0.
             } 
             else // reduce
             {
-                if (TERMINAL == item.lookahead.grammarSymCat)
+                //if (TERMINAL == item.lookahead.grammarSymCat)
                     actionTable[stateIndex][item.lookahead] = "r" + std::to_string(item.prodIndex);
             }
         } 
@@ -434,7 +619,7 @@ void getValidChildren(std::stack<ASTNodePtr>& astRootsPtrStack, int prodIndex, s
         case PRODUCTIONINDEX::ADD:
         case PRODUCTIONINDEX::ASSIGN:
         {
-            for (int childrenIndex = 0; childrenIndex < 2; childrenIndex++) // Note: 2 个有效子节点
+            for (int childIndex = 0; childIndex < 2; childIndex++) // Note: 2 个有效子节点
             {
                 std::cout << "========prodIndex: " << prodIndex << " astRootsPtrStack Top NodeCat: " << 
                     static_cast<int>(astRootsPtrStack.top()->category) << std::endl;
@@ -443,13 +628,27 @@ void getValidChildren(std::stack<ASTNodePtr>& astRootsPtrStack, int prodIndex, s
             }
             break;
         }
-        case PRODUCTIONINDEX::STATEMENT_REDUCED2_PROG: 
+        case PRODUCTIONINDEX::EPSILON_REDUCED2_STATEMENTLIST:
         {
-            std::cout << "========prodIndex: " << prodIndex << " astRootsPtrStack Top NodeCat: " << 
+            std::cout << "Doesn't generate child for epsilon reduction!\n";
+            break;
+        }
+        case PRODUCTIONINDEX::STATEMENTLIST_STATEMENT_REDUCED2_STATEMENTLIST: 
+        {
+            std::cout << "======astRootsPtrStack size(first/later time: 1/2): " << astRootsPtrStack.size() << "\n";
+            
+            std::cout << "======prodIndex: " << prodIndex << " astRootsPtrStack Top NodeCat: " << 
                 static_cast<int>(astRootsPtrStack.top()->category) << std::endl;
             children.insert(children.begin(), std::move(astRootsPtrStack.top() ) );
             astRootsPtrStack.pop();
             break;
+        }
+        case PRODUCTIONINDEX::STATEMENTLIST_REDUCED2_PROG: 
+        {
+            std::cout << "========prodIndex: " << prodIndex << " astRootsPtrStack Top NodeCat: " << 
+                    static_cast<int>(astRootsPtrStack.top()->category) << std::endl;
+            children.insert(children.begin(), std::move(astRootsPtrStack.top() ) );
+            astRootsPtrStack.pop();
         }
     }
 }
@@ -515,7 +714,7 @@ ASTNodePtr CreateAssignmentNode(std::vector<ASTNodePtr>& children)
                 1] return the same type of (no-volatile) local var 
                 2] return the same named local variable on all return paths
 */
-ASTNodePtr getParentNode(int prodIndex, std::vector<ASTNodePtr>& children)
+ASTNodePtr getParentNode(std::stack<ASTNodePtr>& astRootsPtrStack, int prodIndex, std::vector<ASTNodePtr>& children)
 {
     ASTNodePtr parent;
 
@@ -545,16 +744,56 @@ ASTNodePtr getParentNode(int prodIndex, std::vector<ASTNodePtr>& children)
         case PRODUCTIONINDEX::ASSIGN:
             parent = CreateAssignmentNode(children); //return CreateBinaryOpNode(children, "=");  
             break;
-
-        case PRODUCTIONINDEX::STATEMENT_REDUCED2_PROG: 
+        case PRODUCTIONINDEX::EPSILON_REDUCED2_STATEMENTLIST:
         {
-            auto prog = std::make_unique<ProgramNode>();
-            prog->stmts.push_back(std::move(children[0]) );
-            parent = std::move(prog); // Note: std::unique_ptr<Derived> will be implicitly converted to std::unique_ptr<Base>. Requirment: Base must has virtial Dtor.
+            std::cout << "Doesn't generate parent for epsilon reduction!\n";
             break;
-            //auto prog = std::make_unique<ProgramNode>();
-            //prog->stmts.push_back(std::move(children[0]) );
-            //return std::move(prog); // Note: Local obj which supports move semantics, such as unique_ptr, can be returned directly, compiler will automatically move. However, Explicitly use std::move may suppress NRVO optimization 
+        }
+        case PRODUCTIONINDEX::STATEMENTLIST_STATEMENT_REDUCED2_STATEMENTLIST: 
+        {
+            // Note: only the first time/entry into this case, execute this create obj.
+            static std::unique_ptr<ProgramNode> prog = std::make_unique<ProgramNode>(); 
+            std::cout << "======ProgramNode addr: " << prog.get() << std::endl;
+            
+            /*
+                Note: Upon the second or subsequent entry into this case.
+                    if the first time/entry into this case, astRootsPtrStack should be empty.
+            */
+            if (!astRootsPtrStack.empty() )
+            {
+                std::cout << "======prodIndex: " << prodIndex << " astRootsPtrStack Top NodeCat(should be 0/ASTNodeCategory::PROG): " << 
+                    static_cast<int>(astRootsPtrStack.top()->category) << std::endl;
+                
+                /*
+                Note:
+                    [1] move ownship of stmts from stack.Top() back to prog.
+                    [2] std::unique_ptr<Base> can't be implicitly converted to std::unique_ptr<Derived>,
+                        although std::unique_ptr<Base> point to Derived.
+                */
+                prog.reset( 
+                           static_cast<ProgramNode*>(astRootsPtrStack.top().release() ) 
+                          );
+                // prog = std::move(astRootsPtrStack.top() ); // syntax error
+                astRootsPtrStack.pop();
+            }
+            std::cout << "======ProgramNode addr: " << prog.get() << std::endl;
+
+            prog->stmts.push_back(std::move(children[0]) );
+
+            /*
+            Note: 
+                [1] move ownship of stmts from prog to parent(later will be moved to stack)
+                
+                [2] std::unique_ptr<Derived> will be implicitly converted to std::unique_ptr<Base>. 
+                    Requirment: Base must has virtial Dtor.
+            */
+            parent = std::move(prog);
+            break;
+        }
+        case PRODUCTIONINDEX::STATEMENTLIST_REDUCED2_PROG: 
+        {
+            parent = std::move(children[0]);
+            break;
         }
         default:
             //return std::move(children[0]);
@@ -575,8 +814,15 @@ void reduceOpForAST(std::stack<ASTNodePtr>& astRootsPtrStack, int prodIndex)
             static_cast<int>(child->category) << std::endl;
     }
     
-    ASTNodePtr parent = getParentNode(prodIndex, children);
-    astRootsPtrStack.push(std::move(parent) );
+    ASTNodePtr parent = getParentNode(astRootsPtrStack, prodIndex, children);
+    if (parent) // not empty
+    {
+        astRootsPtrStack.push(std::move(parent) );
+    }
+    else
+    {
+        std::cout << "======parent empty. Epsilon reduction: Don't Push and Pop!\n";
+    }
 }
 
 /*
@@ -788,19 +1034,32 @@ parser(const Token2CatStream& token2CatStream)
     int inputPtr = -1;
     int curStateIndex = -1;
     int transDstStateIndex = -1;
+
+    #ifdef NEEDPARSERTREE 
+    ParserTreeNodePtr 
+    #else
+    ASTNodePtr
+    #endif
+    ptr;
+    
     while (true)
     {
         int curStateIndex = stateIndexStack.top();
 
         std::cout << "inputPtr: " << inputPtr << ", curStateIndex: " << curStateIndex << std::endl;
         const auto& nextToken2Cat = input[inputPtr + 1];
-        GrammarSym nextTermSym = getTerminalSym(nextToken2Cat.second); // Note: the last is just the eof
+        GrammarSym lookaheadInInput = getTerminalSym(nextToken2Cat.second); // Note: the last is just the eof
         std::cout << "nextToken2Cat: " << nextToken2Cat.first << ", " << nextToken2Cat.second << std::endl;
 
-        if (actionTable[curStateIndex].count(nextTermSym) )  // action not empty
+        /*
+        Note:
+            if Grammar syms don't include epsilon, the first step is shift;
+            else if Grammar syms include epsilon, the first step maybe reduce.
+        */
+        if (actionTable[curStateIndex].count(lookaheadInInput) )  // action not empty
         {
-            std::string action = actionTable[curStateIndex][nextTermSym];
-            std::cout << "curStateIndex: " << curStateIndex << ", nextSymInInput: " << nextToken2Cat.second << ", " << nextToken2Cat.second << 
+            std::string action = actionTable[curStateIndex][lookaheadInInput];
+            std::cout << "curStateIndex: " << curStateIndex << ", nextSymInInput: " << nextToken2Cat.first << ", " << nextToken2Cat.second << 
                 ", action: " << action << std::endl;
 
             if ('s' == action[0]) // Note 
@@ -809,14 +1068,14 @@ parser(const Token2CatStream& token2CatStream)
 
                 inputPtr++; // shift: truly consum the nextSymInInput that just be read // Note: 第1步必定为 shift
 
-                grammarSymStack.push(nextTermSym); // nextSymInInput(getTerminalSym) pushed to stack
+                grammarSymStack.push(lookaheadInInput); // nextSymInInput(getTerminalSym) pushed to stack
                 transDstStateIndex = std::stoi(action.substr(1) ); // move to the dst transition state 
                 stateIndexStack.push(transDstStateIndex); 
                 
                 shiftOpForAST(astRootsPtrStack, nextToken2Cat);
 
 #ifdef NEEDPARSERTREE 
-                ParserTreeNodePtr termNode = std::make_shared<ParserTreeNode>(nextTermSym, nextToken2Cat.first);
+                ParserTreeNodePtr termNode = std::make_shared<ParserTreeNode>(lookaheadInInput, nextToken2Cat.first);
                 parserTreeNodeStack.push(termNode); 
 #endif 
 
@@ -870,9 +1129,12 @@ parser(const Token2CatStream& token2CatStream)
                     std::cout << "\n Parsing success, AST generated success !!!\n" << std::endl;
 
 #ifdef NEEDPARSERTREE
-                    return parserTreeNodeStack.top();
+                    ptr = parserTreeNodeStack.top();
+                    // return parserTreeNodeStack.top();
 #else 
-                    return std::move(astRootsPtrStack.top() ); // Note: stack.pop 返回的 栈顶元素的引用（即使是临时变量）=> 是左值
+                    ptr = std::move(astRootsPtrStack.top() );
+                    return ptr;
+                    //return std::move(astRootsPtrStack.top() ); // Note: stack.pop 返回的 栈顶元素的引用（即使是临时变量）=> 是左值
 #endif 
                 }
             } 
@@ -880,10 +1142,12 @@ parser(const Token2CatStream& token2CatStream)
         else 
         {
             std::cout << "parsing Error!!!\n";
-            return nullptr;
+            return ptr;
+            //return nullptr;
         }   
     }
-    return nullptr;
+    return ptr;
+    //return nullptr;
 }
 
 void printItem(const LR1Item& item) 
@@ -896,21 +1160,14 @@ void printItem(const LR1Item& item)
             std::cout << ".";
 
         if (NON_TERMINAL == productions[item.prodIndex].rhs[symIndex].grammarSymCat)
-            std::cout << nonTerminalId2Str[productions[item.prodIndex].rhs[symIndex].termTokenCat_nonTermId].second;
+            std::cout << nonTerminalId2Str[productions[item.prodIndex].rhs[symIndex].termTokenCat_nonTermId].second << " ";
         else 
-            std::cout << terminalId2Str[productions[item.prodIndex].rhs[symIndex].termTokenCat_nonTermId].second; 
+            std::cout << terminalId2Str[productions[item.prodIndex].rhs[symIndex].termTokenCat_nonTermId].second << " "; 
     }
     if (item.dotPos == productions[item.prodIndex].rhs.size() ) 
         std::cout << ".";
-    
     std::cout << ", {";
-    if (TERMINAL == item.lookahead.grammarSymCat)
-    {
-        std::cout << terminalId2Str[item.lookahead.termTokenCat_nonTermId].second;
-    }
-    else  
-        std::cout << "noNeedCalcLookahead when dotNextFollowSym is NonTerminal!" << " ";
-
+    std::cout << terminalId2Str[item.lookahead.termTokenCat_nonTermId].second;
     std::cout << "}";
 }
 /*
@@ -975,7 +1232,7 @@ void printAll(const std::set<GrammarSym>& terms, const std::set<GrammarSym>& non
 
     for (int stateIndex = 0; stateIndex < states.size(); ++stateIndex) 
     {
-        std::cout << std::setw(6) << "I" + std::to_string(stateIndex);
+        std::cout << std::setw(7) << "I" + std::to_string(stateIndex);
         for (GrammarSym nonTerm : nonTerms) 
         {
             if (gotoTable[stateIndex].count(nonTerm) )
@@ -998,9 +1255,10 @@ void printAST(const ASTNodePtr& root, int indent, std::string rootLeftRight) // 
 
     if (ASTNodeCategory::PROG == root->category)
     {
+        std::cout << "prog: \n";
         for (const auto& stmt : static_cast<ProgramNode*>(root.get() )->stmts) 
         {
-            printAST(stmt, indent + 1);
+            printAST(stmt, indent + 1, "subroot:");
         }
     }
     else if (ASTNodeCategory::BINOP == root->category)

@@ -16,9 +16,9 @@ int main()
 
     // ==========2. LR1Parsing 
     initGrammar();
-
+    nonTermDeriveEpsilonCalc();
+    computeFirstSet();
     buildStatesAndStateTransGraph();
-
     buildActTblAndGotoTbl();
     
     std::set<GrammarSym> terms {
@@ -31,11 +31,12 @@ int main()
         {TERMINAL, LPARENTHESES},
         {TERMINAL, RPARENTHESES},
         {TERMINAL, SEMICOLON},
-        eof // Note: eof 
+        eof // Note: eof
     };
 
     std::set<GrammarSym> nonTerms {
         {NON_TERMINAL, Pro},  
+        {NON_TERMINAL, StatementList},  
         {NON_TERMINAL, Statement},  
         {NON_TERMINAL, ASSIG},      
         {NON_TERMINAL, Expr},       
@@ -60,7 +61,7 @@ int main()
     // ==========3. IR CodeGen
     IRGen irGen;
     irGen.genIR(std::move(root) );
-    std::vector<IRGen::IRInstr> irCodeList = irGen.getIRCodeList();
+    std::vector<IRInstr> irCodeList = irGen.getIRCodeList();
     std::cout << "==========IR Code list:" << std::endl;
     for (const auto& irCode: irCodeList)
     {

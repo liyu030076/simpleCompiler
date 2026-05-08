@@ -13,12 +13,11 @@
 #include <vector>
 #include <iostream>
 #include "AST.h"
+#include "common.h"
 
 class IRGen
 {
 public:
-    using IRInstr = std::string;
-
     IRGen(int tmpCount_ = 0): tmpConut(tmpCount_) {}
 
     std::string genIR(ASTNodePtr node);
