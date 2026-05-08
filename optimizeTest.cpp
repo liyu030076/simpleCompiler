@@ -18,7 +18,7 @@ int main()
 }
 
 /*
-    g++ optimize.cpp optimizeTest.cpp
+    g++ common.cpp optimize.cpp optimizeTest.cpp
 */
 
 /*

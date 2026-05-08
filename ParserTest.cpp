@@ -102,6 +102,7 @@ int main()
 }
 
 /*
+    g++ Parser.cpp ParserTest.cpp -D NEEDPARSERTREE
     g++ Parser.cpp ParserTest.cpp
 */
 

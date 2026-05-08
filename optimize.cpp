@@ -2,20 +2,10 @@
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
-#include <cctype>
 #include <algorithm>
 #include "optimize.h"
 
 // ====================== utilities ======================
-static inline std::string trim(std::string s) // eliminate blank and '\t' at the begin and the end of the string  
-{
-    auto l = s.find_first_not_of(" \t");
-    auto r = s.find_last_not_of(" \t");
-    if (l == std::string::npos) 
-        return "";
-    return s.substr(l, r - l + 1);
-}
-
 static bool isNumber(const std::string& s) 
 {
     if (s.empty() ) 
@@ -46,41 +36,6 @@ static int calc(int a, int b, const std::string& op)
 static std::string exprUniqueKey(const std::string& s1, const std::string& op, const std::string& s2) 
 {
     return s1 + "|" + op + "|" + s2;
-}
-
-struct TACLine  // a TAC instruction: operator/operands/dst are all represented as string, judge and convert when using.
-{
-    std::string dst;
-    std::string s1, op, s2;
-    bool isBinaryOp;  // => form: dst = s1 op s2
-    bool isAssign;    // => form: dst = s1
-};
-
-static TACLine parseTAC(const IRInstr& line) 
-{
-    TACLine res;
-    size_t eq = line.find('=');
-    if (eq == std::string::npos) // invalid IR Code
-        return res;
-
-    res.dst = trim(line.substr(0, eq) ); // line[eq] == "=="
-    std::string right = trim(line.substr(eq + 1) );
-
-    size_t opPos = right.find_first_of("+*");
-    if (opPos == std::string::npos) // not binaryOp => be bound to be assignment 
-    {
-        res.isAssign = true;
-        res.isBinaryOp = false;
-        res.s1 = trim(right);
-        return res;
-    }
-
-    res.isBinaryOp = true;
-    res.isAssign = false;
-    res.s1 = trim(right.substr(0, opPos));
-    res.op = std::string(1, right[opPos]);
-    res.s2 = trim(right.substr(opPos + 1) );
-    return res;
 }
 
 // 1. 复制传播 + 常量传播 + 常量折叠
@@ -216,9 +171,9 @@ void eliminateCSE(std::vector<IRInstr>& src)
 void optimizeAll(std::vector<IRInstr>& tac) 
 {
     cpyPro_constPro_constFold(tac); 
-    printTAC(tac, "TAC after cpyPro_constPro_constFold optimize:");    
+    printTAC(tac, "4.1 TAC after cpyPro_constPro_constFold optimize:");    
     eliminateCSE(tac);  
-    printTAC(tac, "TAC after eliminateCSE:");    
+    printTAC(tac, "4.2 TAC after eliminateCSE:");    
 }
 
 void printTAC(const std::vector<IRInstr>& tac, const std::string& title) 

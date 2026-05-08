@@ -14,7 +14,7 @@ int main()
 }
 
 /*
-    g++ LexicalAnalysize.cpp LexicalAnalysizeTest.cpp -D NEEDPARSERTREE
+    g++ common.cpp LexicalAnalysize.cpp LexicalAnalysizeTest.cpp
 */
 
 /*

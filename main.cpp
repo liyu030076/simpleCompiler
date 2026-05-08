@@ -5,13 +5,14 @@
 #include "Parser.h"
 #include "IRGen.h"
 #include "optimize.h"
+#include "CodeGen.h"
 
 int main()
 {
-    // LexicalAnalysis + Parser: test ok
     std::string input = "x = 10 * (ab + 120);"; // test1 ok
     //std::string input = "b = 1; c = para; d = b + 2; e = 1 + c; f = 1 + c;"; // test2 ok
     // std::string input = "ab = 2; b = ab; c = ab + 3 + 5; d = ab + 120; x = 10 * (ab + 120); y = c + d + x;"; // test2 ok
+    
     // ==========1. LexicalAnalysis
     std::vector<std::pair<std::string, TokenCategory> > token2CatStream;
     token2CatStream = LexicalAnalysis(input);
@@ -54,7 +55,7 @@ int main()
 #ifdef NEEDPARSERTREE
         printParseTree(root);
 #else 
-        std::cout << "==========AST structure:" << std::endl;
+        std::cout << "==========2. AST structure:" << std::endl;
         printAST(root);
 #endif
 
@@ -64,7 +65,7 @@ int main()
     IRGen irGen;
     irGen.genIR(std::move(root) );
     std::vector<IRInstr> irCodeList = irGen.getIRCodeList();
-    std::cout << "==========IR Code list:" << std::endl;
+    std::cout << "==========3. IR Code list:" << std::endl;
     for (const auto& irCode: irCodeList)
     {
         std::cout << irCode << std::endl;
@@ -74,15 +75,31 @@ int main()
     printTAC(irCodeList, "original TAC");
 
     optimizeAll(irCodeList);
+
+    // ==========5. Code Gen
+    std::vector<TACLine> tacLines;
+    tacLines.reserve(100);
+
+    for (const IRInstr& irInstr: irCodeList)
+    {
+        TACLine tacLine = parseTAC(irInstr);
+        tacLines.push_back(tacLine);
+        //std::cout << "dst: " << tacLine.dst << ", s1: " << tacLine.s1 << ", op: " << tacLine.op << ", s2: " << tacLine.s2 << std::endl;
+    }
+
+    CodeGenerator codeGen;
+    codeGen.generate(tacLines);   
+    codeGen.printAsm(); 
 }
 
 /*
-    g++ LexicalAnalysize.cpp Parser.cpp IRGen.cpp optimize.cpp main.cpp
+    g++ common.cpp LexicalAnalysize.cpp Parser.cpp IRGen.cpp optimize.cpp CodeGen.cpp main.cpp
 */
 
 /*
-test1 output:
-==========AST structure:
+test1 output: ok
+...
+==========2. AST structure:
 prog: 
   subroot:=
     lhs:x
@@ -91,7 +108,7 @@ prog:
       rhs:+
         lhs:ab
         rhs:120
-==========IR Code list:
+==========3. IR Code list:
 t1 = 10
 t2 = 120
 t3 = ab + t2
@@ -105,23 +122,31 @@ t3 = ab + t2
 t4 = t1 * t3
 x = t4
 
-==== TAC after cpyPro_constPro_constFold optimize: ====
+==== 4.1 TAC after cpyPro_constPro_constFold optimize: ====
 t1 = 10
 t2 = 120
 t3 = ab + 120
 t4 = 10 * t3
 x = t4
 
-==== TAC after eliminateCSE: ====
+==== 4.2 TAC after eliminateCSE: ====
 t1 = 10
 t2 = 120
 t3 = ab + 120
 t4 = 10 * t3
 x = t4
+=== 5. CodeGen: abstract asm instructions: ===
+MOV r1, #10
+MOV r2, #120
+MOV r3, ab
+ADD r3, #120
+MOV r4, #10
+MUL r4, r3
+MOV r5, r4
 */
 
 /*
-test2 output:
+test2 output: ok
 ==========AST structure:
 prog: 
   subroot:=
@@ -200,5 +225,4 @@ e = t5
 t6 = 1
 t7 = t5
 f = t7
-
 */
