@@ -14,7 +14,11 @@ int main()
 }
 
 /*
-    g++ common.cpp LexicalAnalysize.cpp LexicalAnalysizeTest.cpp
+    当前目录下 make
+    cd build 
+    ./test.out
+
+    //g++ common.cpp LexicalAnalysize.cpp LexicalAnalysizeTest.cpp
 */
 
 /*

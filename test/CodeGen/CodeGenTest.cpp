@@ -28,7 +28,11 @@ int main()
 }
 
 /*
-    g++ common.cpp CodeGen.cpp CodeGenTest.cpp
+    当前目录下 make
+    cd build 
+    ./test.out
+
+    //g++ common.cpp CodeGen.cpp CodeGenTest.cpp
 */
 
 /*

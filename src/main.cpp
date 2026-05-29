@@ -93,7 +93,11 @@ int main()
 }
 
 /*
-    g++ common.cpp LexicalAnalysize.cpp Parser.cpp IRGen.cpp optimize.cpp CodeGen.cpp main.cpp
+    当前目录下 make
+    cd build 
+    ./test.out
+
+    //g++ common.cpp LexicalAnalysize.cpp Parser.cpp IRGen.cpp optimize.cpp CodeGen.cpp main.cpp
 */
 
 /*

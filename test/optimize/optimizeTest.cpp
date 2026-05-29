@@ -18,7 +18,11 @@ int main()
 }
 
 /*
-    g++ common.cpp optimize.cpp optimizeTest.cpp
+    当前目录下 make
+    cd build 
+    ./test.out
+
+    //g++ common.cpp optimize.cpp optimizeTest.cpp
 */
 
 /*

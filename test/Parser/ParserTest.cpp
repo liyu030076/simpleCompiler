@@ -102,8 +102,12 @@ int main()
 }
 
 /*
+    当前目录下 make
+    cd build 
+    ./test.out
+
+    或 
     g++ Parser.cpp ParserTest.cpp -D NEEDPARSERTREE
-    g++ Parser.cpp ParserTest.cpp
 */
 
 /*

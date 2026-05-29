@@ -70,7 +70,11 @@ int main()
 }
 
 /*
-    g++ LexicalAnalysize.cpp Parser.cpp IRGen.cpp IRGenTest.cpp
+    当前目录下 make
+    cd build 
+    ./test.out
+    
+    // g++ LexicalAnalysize.cpp Parser.cpp IRGen.cpp IRGenTest.cpp
 */
 
 /*
